@@ -108,42 +108,10 @@ Schedules are stored in SQLite (WAL mode).
 ### 📦 **Lightweight & Self‑Contained**
 Deckhand runs as a single container:
 
-- FastAPI or Flask backend  
+- Flask backend  
 - SQLite WAL database  
-- Optional Trivy binary  
 - Zero agents  
 - Zero sidecars  
-
----
-
-## 🧱 Architecture Overview
-┌──────────────────────────┐
-│        Homarr         │
-│  (Deckhand Widget)       │
-└─────────────┬────────────┘
-              │
-              ▼
-┌───────────────────┐
-│   Deckhand   │
-│  API + Scanner    │
-│  Scheduler + DB   │
-└───────┬──────────┘
-        │
-        ┴────────────────────────────────┐
-        │                                │
-        ▼                                ▼
-┌──────────────────┐          ┌──────────────────────┐
-│  Registry Poller  │         │  Security Scanner    │
-│ (Docker Hub/GHCR) │         │   (Trivy API)        │
-└──────────────────┘          └──────────────────────┘
-        │
-        ▼
-┌──────────────────┐
-│   Portainer API  │
-│  (Discovery +    │
-│   Update Exec)   │
-└──────────────────┘
-
 
 ---
 
@@ -225,7 +193,7 @@ created_at        DATETIME
 ## 🛠️ Installation (Coming Soon)
 
 A `docker-compose.yml` will be provided once the API and UI stabilize.  
-Deckhand will run as a single container with optional Trivy integration.
+Deckhand will run as a single container with optional Trivy integration for security.
 
 ---
 
@@ -269,7 +237,7 @@ Deckhand is built for the homelab community — help shape it.
 
 ## 📜 License
 
-MIT License (or your preferred license)
+Apache 2.0
 
 ---
 
