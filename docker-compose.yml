@@ -1,0 +1,41 @@
+services:
+  deckhand:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: deckhand
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    
+    # Mount database volume for persistence
+    volumes:
+      - deckhand-db:/app
+    
+    # Load configuration from .env file
+    env_file:
+      - .env
+    
+    # Required environment variables
+    environment:
+      - FLASK_ENV=production
+      - PORTAINER_URL=${PORTAINER_URL}
+      - PORTAINER_API_KEY=${PORTAINER_API_KEY}
+      - DECKHAND_UI_MODE=${DECKHAND_UI_MODE:-fun}
+      - DATABASE_PATH=/app/deckhand.db
+      - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
+    
+    # Security options
+    security_opt:
+      - no-new-privileges:true
+    
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:5000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+
+volumes:
+  deckhand-db:
+    driver: local

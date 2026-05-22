@@ -1,0 +1,5 @@
+flask
+flask-apscheduler
+requests
+python-dotenv
+packaging
