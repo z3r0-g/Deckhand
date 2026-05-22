@@ -11,7 +11,16 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      image_name: ${{ steps.lowercase.outputs.image_name }}
+    steps:
+      - id: lowercase
+        run: echo "image_name=${GITHUB_REPOSITORY@L}" >> $GITHUB_OUTPUT
+
   build-and-push:
+    needs: prepare
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -32,7 +41,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          images: ${{ env.REGISTRY }}/${{ needs.prepare.outputs.image_name }}
           tags: |
             type=ref,event=branch
             type=semver,pattern={{version}}
