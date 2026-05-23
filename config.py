@@ -7,9 +7,12 @@
 #Depedencies
 import os
 import secrets
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Portainer Configuration (REQUIRED)
-PORTAINER_URL = os.getenv("PORTAINER_URL", "")
+PORTAINER_URL = os.getenv("PORTAINER_URL", "").rstrip("/")
 PORTAINER_API_KEY = os.getenv("PORTAINER_API_KEY", "")
 
 #UI Mode (Optional - Set to 'fun' by Default with Optional 'minimal' mode)

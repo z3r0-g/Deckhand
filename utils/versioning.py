@@ -24,11 +24,11 @@ def version_delta(current, latest):
 
         # Major difference
         if c.major != l.major:
-            return abs(l.major - c.major) * 10
+            return abs(l.major - c.major) * 100
 
         # Minor difference
         if c.minor != l.minor:
-            return abs(l.minor - c.minor)
+            return abs(l.minor - c.minor) * 10
 
         # Patch difference
         return abs(l.micro - c.micro)

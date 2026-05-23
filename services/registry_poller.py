@@ -3,6 +3,10 @@ import re
 from packaging import version
 from cache import cache
 
+# Homelab support: Suppress insecure request warnings for self-signed certificates
+import urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
 from utils.versioning import version_delta
 
 
@@ -206,7 +210,7 @@ class RegistryPoller:
         url = f"https://registry.hub.docker.com/v2/repositories/{repo}/tags?page_size=100"
 
         while url:
-            r = requests.get(url, timeout=5)
+            r = requests.get(url, timeout=10, verify=False)
             if r.status_code != 200:
                 break
 
@@ -235,7 +239,7 @@ class RegistryPoller:
     def _fetch_dockerhub_digest(self, repo, tag):
         try:
             url = f"https://registry.hub.docker.com/v2/repositories/{repo}/tags/{tag}"
-            r = requests.get(url, timeout=5)
+            r = requests.get(url, timeout=10, verify=False)
             if r.status_code != 200:
                 return None
             data = r.json()
@@ -248,10 +252,15 @@ class RegistryPoller:
     # ---------------------------------------------------------
 
     def _poll_ghcr(self, repo, current_tag):
-        repo_path = repo.replace("ghcr.io/", "")
+        prefix = "ghcr.io/"
+        repo_path = repo[len(prefix):] if repo.startswith(prefix) else repo
 
         tags_url = f"https://ghcr.io/v2/{repo_path}/tags/list"
-        tags = requests.get(tags_url).json().get("tags", [])
+        try:
+            r = requests.get(tags_url, timeout=10, verify=False)
+            tags = r.json().get("tags", []) if r.status_code == 200 else []
+        except Exception:
+            tags = []
 
         latest = self._select_latest_semver(tags) or (
             "latest" if "latest" in tags else (tags[0] if tags else current_tag)
@@ -274,7 +283,7 @@ class RegistryPoller:
     def _fetch_ghcr_digest(self, repo_path, tag):
         try:
             url = f"https://ghcr.io/v2/{repo_path}/manifests/{tag}"
-            r = requests.get(url, headers=self.OCI_ACCEPT)
+            r = requests.get(url, headers=self.OCI_ACCEPT, timeout=10, verify=False)
             return r.headers.get("Docker-Content-Digest")
         except Exception:
             return None
@@ -284,16 +293,19 @@ class RegistryPoller:
     # ---------------------------------------------------------
 
     def _poll_lscr(self, repo, current_tag):
-        repo_path = repo.replace("lscr.io/", "")
+        prefix = "lscr.io/"
+        repo_path = repo[len(prefix):] if repo.startswith(prefix) else repo
 
         tags = []
         url = f"https://lscr.io/v2/{repo_path}/tags/list?n=100"
 
         headers = {"Accept": "application/json"}
 
-        r = requests.get(url, headers=headers, timeout=5)
-        if r.status_code == 200:
-            tags = r.json().get("tags", [])
+        try:
+            r = requests.get(url, headers=headers, timeout=10, verify=False)
+            tags = r.json().get("tags", []) if r.status_code == 200 else []
+        except Exception:
+            tags = []
 
         # Rolling-tag aware
         latest = (
@@ -318,7 +330,7 @@ class RegistryPoller:
     def _fetch_lscr_digest(self, repo_path, tag):
         try:
             url = f"https://lscr.io/v2/{repo_path}/manifests/{tag}"
-            r = requests.get(url, headers=self.OCI_ACCEPT, timeout=5)
+            r = requests.get(url, headers=self.OCI_ACCEPT, timeout=10, verify=False)
             return r.headers.get("Docker-Content-Digest")
         except Exception:
             return None
@@ -329,10 +341,27 @@ class RegistryPoller:
 
     def _poll_private(self, registry, repo, current_tag):
         repo_path = repo.split("/", 1)[1]
+        
+        # Try HTTPS first, but stay flexible for local registries
         base = f"https://{registry}/v2/{repo_path}"
-
         tags_url = f"{base}/tags/list"
-        tags = requests.get(tags_url, verify=False).json().get("tags", [])
+
+        try:
+            r = requests.get(tags_url, timeout=10, verify=False)
+            if r.status_code == 200:
+                tags = r.json().get("tags", [])
+            else:
+                raise Exception(f"Status {r.status_code}")
+        except Exception:
+            if not registry.startswith("http"):
+                base = f"http://{registry}/v2/{repo_path}"
+                try:
+                    r = requests.get(f"{base}/tags/list", timeout=10, verify=False)
+                    tags = r.json().get("tags", []) if r.status_code == 200 else []
+                except Exception:
+                    tags = []
+            else:
+                tags = []
 
         latest = self._select_latest_semver(tags) or (
             "latest" if "latest" in tags else (tags[0] if tags else current_tag)
@@ -355,7 +384,7 @@ class RegistryPoller:
     def _fetch_private_digest(self, base, tag):
         try:
             url = f"{base}/manifests/{tag}"
-            r = requests.get(url, headers=self.OCI_ACCEPT, verify=False)
+            r = requests.get(url, headers=self.OCI_ACCEPT, timeout=10, verify=False)
             return r.headers.get("Docker-Content-Digest")
         except Exception:
             return None

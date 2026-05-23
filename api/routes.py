@@ -12,9 +12,13 @@ api_blueprint = Blueprint("api", __name__)
 # Portainer Client Loader
 # ---------------------------------------------------------
 def get_portainer():
+    url = current_app.config.get("PORTAINER_URL", "")
+    key = current_app.config.get("PORTAINER_API_KEY", "")
+    if not url or not key:
+        current_app.logger.error(f"Portainer config missing: URL='{url}', Key='{'***' if key else 'MISSING'}'")
     return PortainerClient(
-        base_url=current_app.config.get("PORTAINER_URL", ""),
-        api_key=current_app.config.get("PORTAINER_API_KEY", "")
+        base_url=url,
+        api_key=key
     )
 
 
@@ -289,10 +293,10 @@ def container_history(container_id):
         history = get_update_history(container_id, limit=50)
         return jsonify(history)
     except Exception as e:
+        current_app.logger.error(f"History fetch failed for {container_id}: {e}")
         return jsonify({
             "error": "history_fetch_failed",
-            "container_id": container_id,
-            "details": str(e)
+            "container_id": container_id
         }), 500
 
 
@@ -305,17 +309,17 @@ def containers_status():
     cfg = load_scheduler_config()
     skip_list = cfg.get("skip", {})
 
-    portainer = PortainerClient(
-        base_url=current_app.config.get("PORTAINER_URL", ""),
-        api_key=current_app.config.get("PORTAINER_API_KEY", "")
-    )
+    portainer = get_portainer()
     poller = RegistryPoller()
 
     results = []
 
     endpoints = portainer.list_endpoints()
+    current_app.logger.info(f"Portainer Discovery: Found {len(endpoints) if isinstance(endpoints, list) else 0} endpoints")
+
     if not isinstance(endpoints, list):
-        return jsonify([])
+        current_app.logger.error(f"Failed to fetch Portainer endpoints: {endpoints}")
+        return jsonify({"error": "portainer_connection_failed", "details": endpoints}), 500
 
     for ep in endpoints:
         ep_id = ep.get("Id")
@@ -323,23 +327,32 @@ def containers_status():
 
         containers = portainer.list_containers(ep_id)
         if not isinstance(containers, list):
+            current_app.logger.warning(f"Endpoint {ep_name} (ID: {ep_id}) returned non-list containers: {containers}")
             continue
+
+        current_app.logger.info(f"Endpoint {ep_name}: Processing {len(containers)} containers")
 
         for c in containers:
             cid = c.get("Id")
             image_ref = c.get("Image", "")
 
-            poll = poller.poll_image(image_ref)
+            # Wrap polling in a try/except so one registry failure doesn't kill the whole list
+            try:
+                poll = poller.poll_image(image_ref)
+            except Exception as e:
+                current_app.logger.error(f"Failed to poll image {image_ref}: {e}")
+                poll = {"heat": 0, "current_tag": "unknown", "latest_tag": None}
 
             current_tag = poll.get("current_tag")
             latest_tag = poll.get("latest_tag")
             heat = poll.get("heat", 0)
 
-            update_available = (
-                latest_tag is not None
-                and current_tag is not None
-                and latest_tag != current_tag
-            )
+            # Ensure we have strings to compare
+            is_outdated = False
+            if latest_tag and current_tag:
+                 is_outdated = str(latest_tag) != str(current_tag)
+
+            update_available = is_outdated
 
             results.append({
                 "container_id": cid,
@@ -355,6 +368,9 @@ def containers_status():
                 "skipped": skip_list.get(cid, False)
             })
 
+    # Cache the full status for the SSE stream to consume
+    cache.set("container_status", results, ttl=300)
+    
     return jsonify(results)
 
 # ---------------------------------------------------------
@@ -420,4 +436,3 @@ def scheduler_update_config():
         )
 
     return jsonify({"status": "ok", "config": cfg})
-

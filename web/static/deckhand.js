@@ -80,8 +80,9 @@ function showLoading() {
         
         // Apply responsive scaling styles
         logoImg.style.maxWidth = "80vw";
+        logoImg.style.padding = "40px";
         logoImg.style.height = "auto";
-        logoImg.style.marginBottom = "20px";
+        logoImg.style.marginBottom = "10px";
 
         overlay.insertBefore(logoImg, text);
     }
@@ -208,11 +209,6 @@ async function loadStatus() {
         console.error("Polling error:", e);
     }
 }
-
-loadStatus();
-setInterval(loadStatus, 15000);
-
-
 // ---------------------------------------------------------
 // UPDATE CONTAINER
 // ---------------------------------------------------------
@@ -416,14 +412,17 @@ evtSource.onmessage = event => {
 // ---------------------------------------------------------
 // INITIALIZE MESSAGES
 // ---------------------------------------------------------
-Promise.all([
-    initLoadingMessages(),
-    initEmptyMessages()
-]).then(() => {
-    setTimeout(() => {
-        if (!window.deckhandHasLoaded) showLoading();
-    }, 1000);
-});
+async function init() {
+    showLoading();
+    await Promise.all([
+        initLoadingMessages(),
+        initEmptyMessages(),
+        loadStatus()
+    ]);
+}
+
+init();
+setInterval(loadStatus, 15000);
 
 
 // ---------------------------------------------------------
