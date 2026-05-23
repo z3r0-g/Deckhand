@@ -1,8 +1,6 @@
 services:
   deckhand:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: ghcr.io/z3r0-g/deckhand:latest
     container_name: deckhand
     restart: unless-stopped
     ports:
@@ -10,7 +8,7 @@ services:
     
     # Mount database volume for persistence
     volumes:
-      - deckhand-db:/app
+      - deckhand-db:/app/data
     
     # Load configuration from .env file
     env_file:
@@ -22,7 +20,7 @@ services:
       - PORTAINER_URL=${PORTAINER_URL}
       - PORTAINER_API_KEY=${PORTAINER_API_KEY}
       - DECKHAND_UI_MODE=${DECKHAND_UI_MODE:-fun}
-      - DATABASE_PATH=/app/deckhand.db
+      - DATABASE_PATH=/app/data/deckhand.db
       - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
     
     # Security options
@@ -30,7 +28,7 @@ services:
       - no-new-privileges:true
     
     healthcheck:
-      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:5000/health')"]
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:5000/health"]
       interval: 30s
       timeout: 10s
       retries: 3

@@ -14,6 +14,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy the rest of the application
 COPY . .
 
+# Create data directory for SQLite persistence
+RUN mkdir -p /app/data && chmod 777 /app/data
+
 EXPOSE 5000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \

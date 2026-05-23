@@ -57,7 +57,7 @@ jobs:
             type=raw,value=${{ env.APP_VERSION }},enable=${{ github.ref == 'refs/heads/main' }}
             type=ref,event=branch
             type=ref,event=pr
-            type=sha,format=short,prefix=${{ env.APP_VERSION }}-
+            type=sha,format=short,prefix=${{ env.APP_VERSION }}-sha-
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
           flavor: |
@@ -65,13 +65,14 @@ jobs:
 
       # Create & Push Docker Image (Multi-Arch)
       - name: Create & Push Docker Image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          no-cache: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
           provenance: false
           sbom: false
