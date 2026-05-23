@@ -10,6 +10,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
+  APP_VERSION: 0.0.1
 
 permissions:
   contents: read
@@ -53,11 +54,12 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ needs.PREP.outputs.image_name }}
           tags: |
-            type=ref,event=branch                     # Tags 'main'
-            type=ref,event=pr                         # Tags 'pr-5'
-            type=semver,pattern={{version}}           # Tags '1.0.0' (on git tag)
-            type=semver,pattern={{major}}.{{minor}}   # Tags '1.0' (on git tag)
-            type=sha,format=short,prefix=             # Tags 'a1b2c3d' (short commit sha)
+            type=raw,value=${{ env.APP_VERSION }},enable=${{ github.ref == 'refs/heads/main' }}
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha,format=short,prefix=${{ env.APP_VERSION }}-
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
           flavor: |
             latest=true
 
