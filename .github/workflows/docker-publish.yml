@@ -51,6 +51,7 @@ jobs:
             type=ref,event=branch
             type=semver,pattern={{version}}
             type=sha
+            type=raw,value=build-${{ github.run_number }}
             latest
 
       - name: Build and push Docker image

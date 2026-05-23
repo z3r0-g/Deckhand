@@ -3,7 +3,8 @@
 // ---------------------------------------------------------
 window.deckhandHasLoaded = false;
 
-let showOnlyUpdates = false;
+let showOnlyUpdates = true;
+let searchTerm = "";
 let lastLogs = {};
 let currentContainerData = [];
 
@@ -119,13 +120,19 @@ function renderStatus(data) {
     const root = document.getElementById("deckhand");
     root.innerHTML = "";
 
-    const filtered = data.filter(c => !showOnlyUpdates || c.update_available);
+    updateSummary(data);
+
+    const filtered = data.filter(c => {
+        const matchesUpdate = !showOnlyUpdates || c.update_available;
+        const matchesSearch = (c.name + " " + c.image).toLowerCase().includes(searchTerm.toLowerCase());
+        return matchesUpdate && matchesSearch;
+    });
 
     // EMPTY STATE
     if (filtered.length === 0) {
         const msg = emptyMessages.length
             ? emptyMessages[Math.floor(Math.random() * emptyMessages.length)]
-            : "No containers found, Cap'n.";
+            : "Yar deck be clean, Cap'n!";
 
         const div = document.createElement("div");
         div.className = "empty-state";
@@ -148,7 +155,7 @@ function renderStatus(data) {
             <div class="name">${c.name}</div>
             <div class="image">${c.image}</div>
 
-            <div class="tag">Current: ${c.current_tag || "n/a"}</div>
+            <div class="tag">Host: ${c.endpoint_name || "n/a"}</div>
             <div class="tag">Latest: ${c.latest_tag || "n/a"}</div>
 
             <div class="heat heat-${c.heat}" title="${meta.tip}">
@@ -168,6 +175,23 @@ function renderStatus(data) {
 
         root.appendChild(card);
     });
+}
+
+function updateSummary(data) {
+    const bar = document.getElementById("summary-stats");
+    if (!bar) return;
+
+    const total = data.length;
+    const outdated = data.filter(c => c.update_available).length;
+    const healthy = total - outdated;
+    const critical = data.filter(c => c.heat === 4).length;
+
+    bar.innerHTML = `
+        <div class="stat-item">Total: <span>${total}</span></div>
+        <div class="stat-item">Outdated: <span class="warn">${outdated}</span></div>
+        <div class="stat-item">Critical: <span class="danger">${critical}</span></div>
+        <div class="stat-item">Healthy: <span class="success">${healthy}</span></div>
+    `;
 }
 
 
@@ -234,41 +258,72 @@ async function updateContainer(id) {
 // ---------------------------------------------------------
 // UPDATE ALL
 // ---------------------------------------------------------
-document.getElementById("update-all").addEventListener("click", async () => {
-    const res = await fetch("/api/containers/status");
-    const data = await res.json();
+const updateAllBtn = document.getElementById("update-all");
+if (updateAllBtn) {
+    updateAllBtn.addEventListener("click", async () => {
+        const res = await fetch("/api/containers/status");
+        const data = await res.json();
 
-    const outdated = data.filter(c => c.update_available);
+        const outdated = data.filter(c => c.update_available);
 
-    if (outdated.length === 0) {
-        alert("No containers need updating.");
-        return;
-    }
+        if (outdated.length === 0) {
+            alert("No containers need updating.");
+            return;
+        }
 
-    const names = outdated.map(c => `• ${c.name}`).join("\n");
+        const names = outdated.map(c => `• ${c.name}`).join("\n");
 
-    const ok = confirm(
-        `Update ALL outdated containers?\n\nThis will update:\n${names}\n\nProceed?`
-    );
+        const ok = confirm(
+            `Update ALL outdated containers?\n\nThis will update:\n${names}\n\nProceed?`
+        );
 
-    if (!ok) return;
+        if (!ok) return;
 
-    for (const c of outdated) {
-        await updateContainer(c.container_id);
-    }
-});
+        for (const c of outdated) {
+            await updateContainer(c.container_id);
+        }
+    });
+}
 
 
 // ---------------------------------------------------------
 // FILTER TOGGLE
 // ---------------------------------------------------------
-document.getElementById("filter-toggle").addEventListener("click", () => {
-    showOnlyUpdates = !showOnlyUpdates;
-    document.getElementById("filter-toggle").textContent =
-        showOnlyUpdates ? "Show: Outdated" : "Show: All";
+const filterToggle = document.getElementById("filter-toggle");
+if (filterToggle) {
+    filterToggle.textContent = showOnlyUpdates ? "Show: Outdated" : "Show: All";
+    filterToggle.addEventListener("click", () => {
+        showOnlyUpdates = !showOnlyUpdates;
+        filterToggle.textContent = showOnlyUpdates ? "Show: Outdated" : "Show: All";
+        renderStatus(currentContainerData);
+    });
+}
 
-    renderStatus(currentContainerData);
-});
+const searchBtn = document.getElementById("search-btn");
+const searchInput = document.getElementById("search-input");
+const summaryStats = document.getElementById("summary-stats");
+
+if (searchBtn && searchInput && summaryStats) {
+    searchInput.value = searchTerm;
+
+    searchBtn.addEventListener("click", () => {
+        searchBtn.classList.add("hidden");
+        summaryStats.classList.add("hidden");
+        searchInput.classList.remove("hidden");
+        searchInput.focus();
+    });
+
+    searchInput.addEventListener("input", (e) => {
+        searchTerm = e.target.value;
+        renderStatus(currentContainerData);
+    });
+
+    searchInput.addEventListener("blur", () => {
+        searchInput.classList.add("hidden");
+        searchBtn.classList.remove("hidden");
+        summaryStats.classList.remove("hidden");
+    });
+}
 
 
 // ---------------------------------------------------------
@@ -276,6 +331,8 @@ document.getElementById("filter-toggle").addEventListener("click", () => {
 // ---------------------------------------------------------
 function viewLogs(id) {
     const modal = document.getElementById("log-modal");
+    if (!modal) return;
+
     document.getElementById("log-title").textContent = `Logs for ${id}`;
     document.getElementById("log-body").textContent =
         (lastLogs[id] || ["No logs available"]).join("\n");
@@ -283,9 +340,21 @@ function viewLogs(id) {
     modal.classList.remove("hidden");
 }
 
-document.getElementById("close-log").addEventListener("click", () => {
-    document.getElementById("log-modal").classList.add("hidden");
-});
+const closeLogBtn = document.getElementById("close-log");
+if (closeLogBtn) {
+    closeLogBtn.addEventListener("click", () => {
+        const modal = document.getElementById("log-modal");
+        if (modal) modal.classList.add("hidden");
+    });
+}
+
+const closeHistoryBtn = document.getElementById("close-history");
+if (closeHistoryBtn) {
+    closeHistoryBtn.addEventListener("click", () => {
+        const modal = document.getElementById("history-modal");
+        if (modal) modal.classList.add("hidden");
+    });
+}
 
 
 // ---------------------------------------------------------
@@ -293,6 +362,8 @@ document.getElementById("close-log").addEventListener("click", () => {
 // ---------------------------------------------------------
 function viewHistory(id) {
     const modal = document.getElementById("history-modal");
+    if (!modal) return;
+
     const body = document.getElementById("history-body");
 
     document.getElementById("history-title").textContent =
@@ -326,10 +397,6 @@ function viewHistory(id) {
         });
 }
 
-document.getElementById("close-history").addEventListener("click", () => {
-    document.getElementById("history-modal").classList.add("hidden");
-});
-
 
 // ---------------------------------------------------------
 // SSE LIVE UPDATES
@@ -362,50 +429,61 @@ Promise.all([
 // ---------------------------------------------------------
 // MANUAL REFRESH
 // ---------------------------------------------------------
-document.getElementById("refresh-status").addEventListener("click", () => {
-    const btn = document.getElementById("refresh-status");
-    btn.disabled = true;
-    btn.textContent = "Refreshing…";
+const refreshBtn = document.getElementById("refresh-status");
+if (refreshBtn) {
+    refreshBtn.addEventListener("click", () => {
+        refreshBtn.disabled = true;
+        refreshBtn.textContent = "Refreshing…";
 
-    loadStatus().finally(() => {
-        setTimeout(() => {
-            btn.disabled = false;
-            btn.textContent = "Refresh";
-        }, 600);
+        loadStatus().finally(() => {
+            setTimeout(() => {
+                refreshBtn.disabled = false;
+                refreshBtn.textContent = "Refresh";
+            }, 600);
+        });
     });
-});
+}
 
 
 // ---------------------------------------------------------
 // SCHEDULER SETTINGS
 // ---------------------------------------------------------
-document.getElementById("scheduler-settings").addEventListener("click", async () => {
-    const res = await fetch("/api/scheduler/config");
-    const cfg = await res.json();
+const schedulerSettingsBtn = document.getElementById("scheduler-settings");
+if (schedulerSettingsBtn) {
+    schedulerSettingsBtn.addEventListener("click", async () => {
+        const res = await fetch("/api/scheduler/config");
+        const cfg = await res.json();
 
-    document.getElementById("sched-enabled").checked = cfg.enabled;
-    document.getElementById("sched-interval").value = cfg.interval_minutes;
+        document.getElementById("sched-enabled").checked = cfg.enabled;
+        document.getElementById("sched-interval").value = cfg.interval_minutes;
 
-    document.getElementById("scheduler-modal").classList.remove("hidden");
-});
-
-document.getElementById("sched-save").addEventListener("click", async () => {
-    const enabled = document.getElementById("sched-enabled").checked;
-    const interval = parseInt(document.getElementById("sched-interval").value);
-
-    await fetch("/api/scheduler/config", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-            enabled,
-            interval_minutes: interval
-        })
+        document.getElementById("scheduler-modal").classList.remove("hidden");
     });
+}
 
-    document.getElementById("scheduler-modal").classList.add("hidden");
-    loadStatus();
-});
+const schedSaveBtn = document.getElementById("sched-save");
+if (schedSaveBtn) {
+    schedSaveBtn.addEventListener("click", async () => {
+        const enabled = document.getElementById("sched-enabled").checked;
+        const interval = parseInt(document.getElementById("sched-interval").value);
 
-document.getElementById("sched-close").addEventListener("click", () => {
-    document.getElementById("scheduler-modal").classList.add("hidden");
-});
+        await fetch("/api/scheduler/config", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                enabled,
+                interval_minutes: interval
+            })
+        });
+
+        document.getElementById("scheduler-modal").classList.add("hidden");
+        loadStatus();
+    });
+}
+
+const schedCloseBtn = document.getElementById("sched-close");
+if (schedCloseBtn) {
+    schedCloseBtn.addEventListener("click", () => {
+        document.getElementById("scheduler-modal").classList.add("hidden");
+    });
+}
