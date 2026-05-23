@@ -79,9 +79,11 @@ function showLoading() {
         logoImg.classList.add("loading-logo");
         
         // Apply responsive scaling styles
-        logoImg.style.maxWidth = "80vw";
-        logoImg.style.padding = "40px";
-        logoImg.style.height = "auto";
+        logoImg.style.maxWidth = "min(280px, 70vw)";
+        logoImg.style.maxHeight = "25vh";
+        logoImg.style.padding = "1.5rem";
+        logoImg.style.width = "auto";
+        logoImg.style.objectFit = "contain";
         logoImg.style.marginBottom = "10px";
 
         overlay.insertBefore(logoImg, text);
