@@ -124,7 +124,17 @@ Deckhand runs as a single container:
 
 ---
 
-## 📚 UI Overview
+## 📸 Screenshots
+
+| ![Default View](screenshots/default.png) | ![Unfiltered View](screenshots/unfilter.png) |
+|:---:|:---:|
+| *Default View* | *Unfiltered View* |
+
+
+
+---
+
+## � UI Overview
 
 ### `GET /health`
 JSON Health Check:

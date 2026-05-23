@@ -19,7 +19,7 @@ def create_app():
         app.config.from_pyfile("config.py")
     else:
         # Safe defaults
-        app.config["SECRET_KEY"] = "dev"
+        app.config["SECRET_KEY"] = ""
         app.config["DATABASE_PATH"] = "deckhand.db"
         app.config["PORTAINER_URL"] = ""
         app.config["PORTAINER_API_KEY"] = ""
