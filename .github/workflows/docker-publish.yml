@@ -3,7 +3,6 @@ name: Publish Docker Image
 on:
   push:
     branches: ['main']
-    tags: ['v*.*.*']
   workflow_dispatch:
 
 env:
@@ -48,11 +47,9 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ needs.prepare.outputs.image_name }}
           tags: |
-            type=ref,event=branch
-            type=semver,pattern={{version}}
-            type=sha
-            type=raw,value=build-${{ github.run_number }}
             latest
+            type=raw,value=0.1.${{ github.run_number }}
+            type=sha
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
