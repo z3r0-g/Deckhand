@@ -321,3 +321,179 @@ button:hover {
     opacity: 0.85;
     font-style: italic;
 }
+
+/* ---------------------------------------------------------
+   LIGHT THEME (Auto-detect from browser preference)
+--------------------------------------------------------- */
+@media (prefers-color-scheme: light) {
+    body {
+        background: #f5f5f5;
+        color: #222;
+    }
+
+    .container {
+        padding-bottom: 80px; 
+    }
+
+    .card {
+        background: #ffffff;
+        border: 1px solid #e0e0e0;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+
+    .card:hover {
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    }
+
+    .image {
+        color: #666;
+    }
+
+    .toolbar {
+        background: #ffffff;
+        border-bottom: 1px solid #e0e0e0;
+    }
+
+    .toolbar button {
+        background: #f0f0f0;
+        border: 1px solid #d0d0d0;
+        color: #333;
+    }
+
+    .toolbar button:hover {
+        background: #e0e0e0;
+    }
+
+    button {
+        background: #e8e8e8;
+        color: #222;
+        border: 1px solid #d0d0d0;
+    }
+
+    button:hover {
+        background: #d5d5d5;
+    }
+
+    #search-btn {
+        background: #ffffff;
+        border: 1px solid #d0d0d0;
+        color: #222;
+    }
+
+    #search-input {
+        background: #ffffff;
+        border: 1px solid #d0d0d0;
+        color: #222;
+    }
+
+    #search-input:focus {
+        border-color: #0066cc;
+    }
+
+    #search-input::placeholder {
+        color: #999;
+    }
+
+    #summary-stats {
+        color: #666;
+    }
+
+    .stat-item span {
+        color: #222;
+    }
+
+    .bottom-toolbar {
+        background-color: #ffffff;
+        border-top: 1px solid #e0e0e0;
+        box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.05);
+    }
+
+    .modal {
+        background: rgba(0, 0, 0, 0.3);
+    }
+
+    .modal-content {
+        background: #ffffff;
+        border: 1px solid #e0e0e0;
+        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+    }
+
+    .modal-header {
+        color: #222;
+        border-bottom: 1px solid #e0e0e0;
+        padding-bottom: 10px;
+    }
+
+    #log-body {
+        background: #f9f9f9;
+        color: #333;
+        border: 1px solid #e0e0e0;
+        padding: 10px;
+        border-radius: 6px;
+    }
+
+    .loading {
+        background: #f5f5f5;
+        color: #222;
+    }
+
+    .update-overlay {
+        background: rgba(0, 0, 0, 0.45);
+        color: #fff;
+    }
+
+    .card.updating {
+        border-color: #0066cc;
+        box-shadow: 0 0 10px rgba(0, 102, 204, 0.3);
+    }
+
+    .empty-state {
+        color: #555;
+    }
+
+    /* Light theme badge colors */
+    .sev-ok {
+        background: #4caf50;
+    }
+
+    .sev-patch {
+        background: #2196f3;
+    }
+
+    .sev-minor {
+        background: #ff9800;
+    }
+
+    .sev-major {
+        background: #f44336;
+    }
+
+    .sev-digest {
+        background: #9c27b0;
+    }
+
+    .sev-unknown {
+        background: #bdbdbd;
+    }
+
+    .msg.success { color: #2e7d32; }
+    .msg.fail { color: #d32f2f; }
+
+    .sched-row {
+        color: #333;
+    }
+
+    input[type="checkbox"] {
+        accent-color: #0066cc;
+    }
+
+    input[type="number"] {
+        background: #f9f9f9;
+        border: 1px solid #d0d0d0;
+        color: #222;
+    }
+
+    input[type="number"]:focus {
+        border-color: #0066cc;
+    }
+}
