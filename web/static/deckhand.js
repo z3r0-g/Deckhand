@@ -34,7 +34,7 @@ const heatMeta = {
 
 
 // ---------------------------------------------------------
-// LOADING + EMPTY MESSAGE LOADERS
+// ROTATING MESSAGE LOADERS
 // ---------------------------------------------------------
 async function initLoadingMessages() {
     try {
@@ -63,34 +63,25 @@ async function initEmptyMessages() {
 function showLoading() {
     const overlay = document.getElementById("loading-overlay");
     const text = document.getElementById("loading-text");
-
-    // Ensure the overlay stacks elements vertically and centers them
     overlay.style.display = "flex";
     overlay.style.flexDirection = "column";
     overlay.style.alignItems = "center";
     overlay.style.justifyContent = "center";
-
-    // Add the Deckhand logo above the loading text if it doesn't already exist
     let existingLogo = overlay.querySelector(".loading-logo");
     if (!existingLogo) {
         const logoImg = document.createElement("img");
         logoImg.src = "/web/static/Deckhand.png";
         logoImg.alt = "Deckhand Logo";
         logoImg.classList.add("loading-logo");
-        
-        // Apply responsive scaling styles
         logoImg.style.maxWidth = "min(280px, 70vw)";
         logoImg.style.maxHeight = "25vh";
         logoImg.style.padding = "1.5rem";
         logoImg.style.width = "auto";
         logoImg.style.objectFit = "contain";
         logoImg.style.marginBottom = "10px";
-
         overlay.insertBefore(logoImg, text);
     }
-
     overlay.classList.remove("hidden");
-
     if (loadingInterval) clearInterval(loadingInterval);
 
     // Ensure text scales responsively
@@ -103,7 +94,6 @@ function showLoading() {
             loadingMessages[Math.floor(Math.random() * loadingMessages.length)];
     }, 2000);
 }
-
 function hideLoading() {
     const overlay = document.getElementById("loading-overlay");
     overlay.classList.add("hidden");
@@ -179,7 +169,7 @@ function renderStatus(data) {
         root.appendChild(card);
     });
 }
-
+// Update Summary Stats (Bottom Tool Bar)
 function updateSummary(data) {
     const bar = document.getElementById("summary-stats");
     if (!bar) return;
@@ -211,6 +201,7 @@ async function loadStatus() {
         console.error("Polling error:", e);
     }
 }
+
 // ---------------------------------------------------------
 // UPDATE CONTAINER
 // ---------------------------------------------------------
@@ -325,7 +316,7 @@ if (searchBtn && searchInput && summaryStats) {
 
 
 // ---------------------------------------------------------
-// LOG MODAL
+// MODAL - LOGS
 // ---------------------------------------------------------
 function viewLogs(id) {
     const modal = document.getElementById("log-modal");
@@ -356,7 +347,7 @@ if (closeHistoryBtn) {
 
 
 // ---------------------------------------------------------
-// HISTORY MODAL
+// MODAL - HISTORY
 // ---------------------------------------------------------
 function viewHistory(id) {
     const modal = document.getElementById("history-modal");
