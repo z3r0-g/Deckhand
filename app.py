@@ -2,6 +2,7 @@ from flask import Flask, send_from_directory, render_template
 import os
 from dotenv import load_dotenv
 from urllib.parse import urlparse
+import time
 
 # Blueprint
 from api.routes import api_blueprint
@@ -72,7 +73,8 @@ def create_app():
     @app.get("/")
     def deckhand_ui():
         ui_mode = app.config.get("UI_MODE", "fun")
-        return render_template("deckhand.html", ui_mode=ui_mode)
+        cache_bust = int(time.time())
+        return render_template("deckhand.html", ui_mode=ui_mode, cache_bust=cache_bust)
 
     @app.get("/web/<path:filename>")
     def deckhand_static(filename):

@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Deckhand</title>
     <link rel="icon" type="image/x-icon" href="/web/static/favicon.ico">
-    <link rel="stylesheet" href="/web/static/deckhand.css">
+    <link rel="stylesheet" href="/web/static/deckhand.css?v={{ cache_bust }}">
 </head>
 <body>
 
@@ -75,6 +75,6 @@
     // Injected from backend config
     window.deckhandUiMode = "{{ config.UI_MODE }}";
 </script>
-<script src="/web/static/deckhand.js"></script>
+<script src="/web/static/deckhand.js?v={{ cache_bust }}"></script>
 </body>
 </html>
