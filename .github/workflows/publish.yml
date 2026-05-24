@@ -1,6 +1,5 @@
 # .github/workflows/publish.yml
 name: Publish Docker Image
-
 on:
   push:
     branches: ['main']
