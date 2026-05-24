@@ -6,26 +6,18 @@ services:
     ports:
       - "5000:5000"
     
-    # Mount database volume for persistence
+    #Mount database volume for persistence
     volumes:
       - deckhand-db:/app/data
     
-    # Load configuration from .env file
-    env_file:
-      - .env
-    
-    # Required environment variables
+    #Required environment variables
     environment:
       - FLASK_ENV=production
-      - PORTAINER_URL=${PORTAINER_URL}
-      - PORTAINER_API_KEY=${PORTAINER_API_KEY}
+      - PORTAINER_URL=${PORTAINER_URL:http://portainer:9000}
+      - PORTAINER_API_KEY=${PORTAINER_API_KEY:ptr-1234567890abcdef}
       - DECKHAND_UI_MODE=${DECKHAND_UI_MODE:-fun}
       - DATABASE_PATH=/app/data/deckhand.db
       - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
-    
-    # Security options
-    security_opt:
-      - no-new-privileges:true
     
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:5000/health"]

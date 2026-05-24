@@ -73,7 +73,7 @@ jobs:
             latest=true
           force: true
 
-      # FULL NO‑CACHE BUILD (forces rebuild of every layer)
+      # FULL NO‑CACHE BUILD (forces rebuild of every layer with fresh repo files)
       - name: Create & Push Docker Image
         uses: docker/build-push-action@v6
         with:
@@ -83,8 +83,9 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
-            BUILD_ID=${{ github.run_id }}-${{ github.run_number }}
+            BUILD_ID=${{ github.run_id }}-${{ github.run_number }}-${{ github.sha }}
           no-cache: true
           pull: true
+          cache-to: type=inline
           provenance: false
           sbom: false
