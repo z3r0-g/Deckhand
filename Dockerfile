@@ -25,7 +25,7 @@ COPY utils ./utils
 
 COPY app.py .
 COPY config.py .
-COPY deckhand.db ./deckhand.db  # optional if you want to ship a seed DB
+COPY deckhand.db ./deckhand.db
 
 # Copy UI (your actual structure)
 COPY web/deckhand.html /app/web/deckhand.html
