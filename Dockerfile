@@ -9,9 +9,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-ARG BUILD_ID=0
-RUN echo "Build ID: $BUILD_ID"
-
 # Copy backend
 COPY api ./api
 COPY db ./db
@@ -23,7 +20,11 @@ COPY utils ./utils
 COPY app.py .
 COPY config.py .
 
-# Copy UI (your actual structure)
+# Force cache invalidation for static content with BUILD_ID
+ARG BUILD_ID=0
+RUN echo "Build ID: $BUILD_ID" && echo "Cache buster: $BUILD_ID"
+
+# Copy UI (your actual structure) - comes after BUILD_ID to ensure fresh copy
 COPY web /app/web
 
 RUN mkdir -p /app/data && chmod 777 /app/data
