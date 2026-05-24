@@ -11,6 +11,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Force cache invalidation for every build
+ARG BUILD_ID=0
+RUN echo "Build ID: $BUILD_ID"
+
 # Copy the rest of the application
 COPY . .
 
