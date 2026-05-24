@@ -480,6 +480,26 @@ ghcr.io/your-org/your-app:v1.2.3
 - Create Prometheus Exporter
 - Open to other ideas?  
 
+### **Phase 5 — Maintenance & Utilities**
+- Backup and Restore container volumes
+
+**Backup Command:**
+```bash
+# Replace my_volume with your volume name
+docker run --rm \
+  -v my_volume:/data \
+  -v $(pwd):/backup \
+  alpine tar czf /backup/my_volume_backup.tar.gz -C /data .
+```
+
+**Restore Command:**
+```bash
+docker run --rm \
+  -v my_volume:/data \
+  -v $(pwd):/backup \
+  alpine sh -c "cd /data && tar xzf /backup/my_volume_backup.tar.gz --strip 1"
+```
+
 ---
 
 ## 🤝 Contributing
