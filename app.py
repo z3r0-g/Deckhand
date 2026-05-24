@@ -55,6 +55,15 @@ def create_app():
     # Register API routes
     app.register_blueprint(api_blueprint, url_prefix="/api")
 
+    # Prevent caching of static assets and HTML
+    @app.after_request
+    def set_cache_headers(response):
+        if response.content_type and any(ct in response.content_type for ct in ['text/html', 'application/javascript', 'text/css']):
+            response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate, public, max-age=0'
+            response.headers['Pragma'] = 'no-cache'
+            response.headers['Expires'] = '0'
+        return response
+
     #Health check
     @app.get("/health")
     def health():
