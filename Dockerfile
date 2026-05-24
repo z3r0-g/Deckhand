@@ -24,8 +24,9 @@ COPY config.py .
 ARG BUILD_ID=0
 RUN echo "Build ID: $BUILD_ID" && echo "Cache buster: $BUILD_ID"
 
-# Copy UI (your actual structure) - comes after BUILD_ID to ensure fresh copy
-COPY web /app/web
+# Copy UI files using Flask's standard structure - comes after BUILD_ID to ensure fresh copy
+COPY templates /app/templates
+COPY static /app/static
 
 RUN mkdir -p /app/data && chmod 777 /app/data
 

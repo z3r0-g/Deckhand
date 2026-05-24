@@ -16,8 +16,8 @@ def create_app():
     # Load environment variables from .env file for local development
     load_dotenv()
 
-    # Point template_folder to "web" so we can render deckhand.html and beszel.html
-    app = Flask(__name__, template_folder="web")
+    # Use standard Flask directories: templates/ and static/
+    app = Flask(__name__, template_folder="templates", static_folder="static")
 
     # Load config.py if present
     config_path = os.path.join(os.path.dirname(__file__), "config.py")
@@ -75,11 +75,6 @@ def create_app():
         ui_mode = app.config.get("UI_MODE", "fun")
         cache_bust = int(time.time())
         return render_template("deckhand.html", ui_mode=ui_mode, cache_bust=cache_bust)
-
-    @app.get("/web/<path:filename>")
-    def deckhand_static(filename):
-        web_root = os.path.join(app.root_path, "web")
-        return send_from_directory(web_root, filename)
 
     @app.get("/beszel")
     def beszel_ui():
