@@ -23,11 +23,9 @@ COPY utils ./utils
 COPY app.py .
 COPY config.py .
 
-# Copy UI
-COPY web/deckhand.html /app/web/deckhand.html
-COPY web/static /app/web/static
+# Copy UI (your actual structure)
+COPY web /app/web
 
-# Data directory for runtime DB
 RUN mkdir -p /app/data && chmod 777 /app/data
 
 EXPOSE 5000
