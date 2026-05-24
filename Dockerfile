@@ -2,16 +2,13 @@ FROM python:3.13-slim
 
 WORKDIR /app
 
-# System deps
 RUN apt-get update && apt-get install -y --no-install-recommends \
     wget \
     && rm -rf /var/lib/apt/lists/*
 
-# Python deps
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Cache busting
 ARG BUILD_ID=0
 RUN echo "Build ID: $BUILD_ID"
 
@@ -25,13 +22,12 @@ COPY utils ./utils
 
 COPY app.py .
 COPY config.py .
-COPY deckhand.db ./deckhand.db
 
-# Copy UI (your actual structure)
+# Copy UI
 COPY web/deckhand.html /app/web/deckhand.html
 COPY web/static /app/web/static
 
-# Data directory
+# Data directory for runtime DB
 RUN mkdir -p /app/data && chmod 777 /app/data
 
 EXPOSE 5000
