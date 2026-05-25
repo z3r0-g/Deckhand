@@ -71,7 +71,6 @@ jobs:
             type=semver,pattern=v{{major}}.{{minor}}
           flavor: |
             latest=true
-          force: true
 
       # FULL NO‑CACHE BUILD (forces rebuild of every layer with fresh repo files)
       - name: Create & Push Docker Image

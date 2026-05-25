@@ -17,7 +17,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 #Invalidate Cache and Copy Source
-RUN echo "Build ID: $BUILD_ID" && echo "Cache buster: $BUILD_ID"
+RUN echo "Cache buster: $BUILD_ID"
 COPY api ./api
 COPY db ./db
 COPY integrations ./integrations
@@ -26,7 +26,6 @@ COPY services ./services
 COPY static ./static
 COPY templates ./templates
 COPY utils ./utils
-
 COPY app.py ./
 COPY cache.py ./
 COPY config.py ./
