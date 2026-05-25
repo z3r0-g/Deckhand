@@ -1,13 +1,13 @@
 FROM python:3.13-slim
-WORKDIR /deckhand
+WORKDIR /app
 
 #Set Environment Variables
 ARG BUILD_ID=0
 ARG PORT=5000
-ENV NODE_ENV production
 ENV PORT=${PORT}
+ENV PYTHONUNBUFFERED=1
 
-#Install App Depedencies
+#Install App Dependencies
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
@@ -17,21 +17,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 #Invalidate Cache and Copy Source
-RUN echo "Cache buster: $BUILD_ID"
-COPY api ./api
-COPY db ./db
-COPY integrations ./integrations
-COPY scheduler ./scheduler
-COPY services ./services
-COPY static ./static
-COPY templates ./templates
-COPY utils ./utils
-COPY app.py ./
-COPY cache.py ./
-COPY config.py ./
+ARG BUILD_ID
+RUN echo "Building version: $BUILD_ID"
+COPY . .
 
 #Create Data Directory
-RUN mkdir -p /deckhand/data && chmod 777 /deckhand/data
+RUN mkdir -p /app/data && chmod 777 /app/data
 
 #Expose Application Port
 EXPOSE $PORT
