@@ -1,5 +1,5 @@
 # 🛳️ Deckhand
-![Deckhand](web/static/Deckhand.png)
+![Deckhand](static/Deckhand.png)
 ### *Agentless Container Update Intelligence for Portainer*
 
 Deckhand is a modern, lightweight, agentless replacement for **DIUN** and **Watchtower**, designed for homelab and small‑scale container environments that use **Portainer** for orchestration and want a simple unified dashboard widget that is responsive to scaling.
