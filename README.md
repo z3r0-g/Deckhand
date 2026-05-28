@@ -243,49 +243,6 @@ Stores user‑defined update schedules for containers.
 - **Portainer** 2.0+ (Deckhand relies on a Portainer API Key to operate, which is created in Portainer UI, under 'My Account' → 'Access Tokens' (example: `https://portainer:9000/#!/account`)
 
 ### Quick Start (Docker Compose)
-
-1. **Clone the repository:**
-   ```bash
-   git clone https://github.com/z3r0-g/Deckhand.git
-   cd Deckhand
-   ```
-
-2. **Create your `.env` file:**
-   ```bash
-   cp .env.example .env
-   ```
-
-3. **Edit `.env` with your Portainer details:**
-   ```bash
-   nano .env
-   ```
-   
-   Required fields:
-   ```env
-     PORTAINER_URL=https://your-portainer-host:9000
-     PORTAINER_API_KEY=ptr_xxxxxxxxxxxxxxxxxx
-   ```
-
-4. **Start Deckhand:**
-   ```bash
-   docker-compose up -d
-   ```
-
-5. **Access the UI:**
-   - Open `http://localhost:5000` in your browser
-   - Or embed as an iframe in your dashboard (e.g., Homarr)
-
-### Health Check
-
-```bash
-curl http://localhost:5000/health
-# {"status": "ok", "service": "deckhand"}
-```
-
-### Adding to Portainer Stack
-
-If you prefer to manage Deckhand via **Portainer Stacks**, use the following docker-compose:
-
 ```yaml
 services:
   deckhand:
