@@ -166,14 +166,19 @@ class RegistryPoller:
         return repo, tag
 
     def _detect_registry(self, repo):
-        if repo.startswith("ghcr.io/"):
+        if not repo:
+            return "dockerhub"
+
+        first = repo.split("/", 1)[0].lower()
+
+        if first == "ghcr.io":
             return "ghcr"
 
-        if repo.startswith("lscr.io/"):
+        if first == "lscr.io":
             return "lscr"
 
-        if "." in repo.split("/")[0]:
-            return repo.split("/")[0]
+        if "." in first:
+            return first
 
         return "dockerhub"
 
