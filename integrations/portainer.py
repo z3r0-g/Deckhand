@@ -136,3 +136,26 @@ class PortainerClient:
             return {"status": "ok"}
         except Exception as e:
             return {"error": str(e), "url": url}
+
+    def get_images(self, endpoint_id, dangling=True):
+        """Lists images, optionally filtering for dangling (unused) ones."""
+        filters = '{"dangling": ["true"]}' if dangling else '{}'
+        url = f"/api/endpoints/{endpoint_id}/docker/images/json?filters={filters}"
+        return self._get(url)
+
+    def prune_images(self, endpoint_id):
+        """Prunes unused images on a specific endpoint."""
+        url = f"{self.base_url}/api/endpoints/{endpoint_id}/docker/images/prune"
+        try:
+            r = requests.post(
+                url, 
+                headers=self.headers, 
+                params={"filters": '{"dangling": ["true"]}'}, 
+                timeout=60, 
+                verify=self.verify_ssl
+            )
+            if r.status_code == 200:
+                return r.json()
+            return {"error": "prune_failed", "status_code": r.status_code}
+        except Exception as e:
+            return {"error": str(e)}

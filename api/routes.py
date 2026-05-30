@@ -1,7 +1,9 @@
 from flask import Blueprint, current_app, jsonify, request, Response
 from integrations.portainer import PortainerClient
 from services.registry_poller import RegistryPoller
-from cache import cache
+from services.cache import cache
+from services.intelligence import evaluate_container_intelligence
+from services.database import upsert_container
 import json
 import time
 
@@ -118,7 +120,12 @@ def scan_containers():
 # ---------------------------------------------------------
 @api_blueprint.post("/containers/<container_id>/update")
 def update_container(container_id):
-    from db.database import add_update_history
+    """
+    Triggers a Portainer-managed update flow for a single container.
+    Pulls the latest image, stops, removes, and recreates the container
+    preserving existing configurations.
+    """
+    from services.database import add_update_history
 
     portainer = get_portainer()
     poller = RegistryPoller()
@@ -287,7 +294,7 @@ def update_container(container_id):
 # ---------------------------------------------------------
 @api_blueprint.get("/containers/<container_id>/history")
 def container_history(container_id):
-    from db.database import get_update_history
+    from services.database import get_update_history
 
     try:
         history = get_update_history(container_id, limit=50)
@@ -301,10 +308,40 @@ def container_history(container_id):
 
 
 # ---------------------------------------------------------
+# GET /api/containers/<container_id>/events
+# ---------------------------------------------------------
+@api_blueprint.get("/containers/<container_id>/events")
+def container_events(container_id):
+    """
+    Returns the intelligence audit log for a specific container.
+    Phase 2 component.
+    """
+    from services.database import get_events_for_container
+
+    try:
+        events = get_events_for_container(container_id)
+        # Parse JSON payloads for the frontend
+        for e in events:
+            if e.get('payload'):
+                try:
+                    e['payload'] = json.loads(e['payload'])
+                except (json.JSONDecodeError, TypeError):
+                    pass
+        return jsonify(events)
+    except Exception as e:
+        current_app.logger.error(f"Event fetch failed for {container_id}: {e}")
+        return jsonify({"error": "event_fetch_failed"}), 500
+
+
+# ---------------------------------------------------------
 # GET /api/containers/status
 # ---------------------------------------------------------
 @api_blueprint.get("/containers/status")
 def containers_status():
+    """
+    Aggregates container status across all endpoints, performs registry 
+    polling, and triggers intelligence evaluation.
+    """
     from scheduler.scheduler import load_scheduler_config
     cfg = load_scheduler_config()
     skip_list = cfg.get("skip", {})
@@ -345,6 +382,8 @@ def containers_status():
 
             current_tag = poll.get("current_tag")
             latest_tag = poll.get("latest_tag")
+            digest_current = poll.get("digest_current")
+            digest_latest = poll.get("digest_latest")
             heat = poll.get("heat", 0)
 
             # Ensure we have strings to compare
@@ -354,19 +393,29 @@ def containers_status():
 
             update_available = is_outdated
 
-            results.append({
+            container_data = {
                 "container_id": cid,
                 "name": c.get("Names", ["unknown"])[0].lstrip("/"),
                 "image": image_ref,
                 "current_tag": current_tag,
                 "latest_tag": latest_tag,
+                "digest_current": digest_current,
+                "digest_latest": digest_latest,
                 "heat": heat,
                 "update_available": update_available,
                 "endpoint_id": ep_id,
                 "endpoint_name": ep_name,
                 "update_url": f"/api/containers/{cid}/update",
                 "skipped": skip_list.get(cid, False)
-            })
+            }
+            
+            # Trigger Intelligence Evaluation
+            evaluate_container_intelligence(container_data)
+            
+            # PHASE 2: Fleet State Persistence
+            upsert_container(container_data)
+            
+            results.append(container_data)
 
     # Cache the full status for the SSE stream to consume
     cache.set("container_status", results, ttl=300)
@@ -436,3 +485,40 @@ def scheduler_update_config():
         )
 
     return jsonify({"status": "ok", "config": cfg})
+
+@api_blueprint.get("/maintenance/prune/dry-run")
+def maintenance_prune_dry_run():
+    """Returns a list of dangling images across all endpoints for confirmation."""
+    portainer = get_portainer()
+    endpoints = portainer.list_endpoints()
+    results = []
+
+    if not isinstance(endpoints, list):
+        return jsonify({"error": "failed_to_list_endpoints"}), 500
+
+    for ep in endpoints:
+        imgs = portainer.get_images(ep.get("Id"), dangling=True)
+        if isinstance(imgs, list) and len(imgs) > 0:
+            for img in imgs:
+                results.append({"endpoint": ep.get("Name"), "id": img.get("Id"), "tags": img.get("RepoTags")})
+
+    return jsonify(results)
+
+@api_blueprint.post("/maintenance/prune")
+def maintenance_prune():
+    """
+    Triggers a prune of unused Docker images across all endpoints.
+    Phase 2 Cleanup Task.
+    """
+    portainer = get_portainer()
+    endpoints = portainer.list_endpoints()
+    results = {}
+
+    if not isinstance(endpoints, list):
+        return jsonify({"error": "failed_to_list_endpoints"}), 500
+
+    for ep in endpoints:
+        ep_id = ep.get("Id")
+        results[ep.get("Name")] = portainer.prune_images(ep_id)
+
+    return jsonify(results)

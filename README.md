@@ -414,48 +414,116 @@ ghcr.io/your-org/your-app:v1.2.3
 - ✅ Self-contained docker container
 - ✅ Production-ready docker-compose
 
-### **Phase 2 — Intelligence**
-- CVE scanning (planning to use Trivy integration)  
-- Digest mismatch detection
-- Unused image/volume/network cleanup
-- Event history + audit log
-- Version history tracking
-- LLM Agentic integration (PicoClaw)?
+### **✅ Phase 2 — Intelligence (COMPLETE)**
+- ✅ Digest mismatch detection
+- ✅ Event history + audit log
+- ✅ Version history tracking
+- ✅ Unused image/volume/network cleanup
 
 ### **Phase 3 — UX**
-- Scheduling Engine (defined by stack)  
-- Ignore Version rules (defined by container image, filterable by host)
-- Advance Modals
-  - Add 'last container version' to History Modal
-   - Add identified 'Trivy CVEs' and 'Portainer Notifications' to Logs Modal)
-   - Update Scheduler Modal with rich UI elements enabling stack-level scheduling (in the style of "Azure Update Rings")
-- Add static status indicator bar bottom of navigation with statistics about host health
+- Scheduling Engine (defined by stack) 
+  - Update Scheduler Modal with rich UI elements enabling stack-level scheduling (in the style of "Azure Update Rings")
+  - Enable Ignore Version Rules (Defined in Scheduler Modal by existing Container Image)
+- Advance Event Modal
+  - Add 'last container version' history record, to display in Events
+  - Add identified 'Portainer Notifications' records, to display in Events
 
-### **Phase 4 — Expand Ecosystem**
-- Add ntfy.sh notifications  
-- Enable MQTT publishing  
-- Create Prometheus Exporter
-- Open to other ideas?  
+### **Phase 4 — Maintenance & Utilities**
+- Create new modal to Backup and Restore container volumes
 
-### **Phase 5 — Maintenance & Utilities**
-- Backup and Restore container volumes
+  **Backup Command:**
+  ```bash
+  # Replace my_volume with your volume name
+  docker run --rm \
+    -v my_volume:/data \
+    -v $(pwd):/backup \
+    alpine tar czf /backup/my_volume_backup.tar.gz -C /data .
+  ```
 
-**Backup Command:**
-```bash
-# Replace my_volume with your volume name
-docker run --rm \
-  -v my_volume:/data \
-  -v $(pwd):/backup \
-  alpine tar czf /backup/my_volume_backup.tar.gz -C /data .
-```
+  **Restore Command:**
+  ```bash
+  docker run --rm \
+    -v my_volume:/data \
+    -v $(pwd):/backup \
+    alpine sh -c "cd /data && tar xzf /backup/my_volume_backup.tar.gz --strip 1"
+  ```
 
-**Restore Command:**
-```bash
-docker run --rm \
-  -v my_volume:/data \
-  -v $(pwd):/backup \
-  alpine sh -c "cd /data && tar xzf /backup/my_volume_backup.tar.gz --strip 1"
-```
+---
+
+## **Phase 5 — Homelab Intelligence & Stack Mapping (Planned)**  
+As homelabs scale, they naturally evolve into complex ecosystems: dozens of containers, multiple stacks, reverse proxies, VPN tunnels, shared volumes, and service chains that become difficult to visualize over time. Phase 5 introduces **Homelab Intelligence** — a new layer of insight designed to make Deckhand feel like “Immich‑level polish for homelab container management.”
+
+### **🗺️ Automatic Architecture Diagrams**  
+Generate real‑time, interactive diagrams for any container or stack using Portainer metadata, networks, volumes, and reverse‑proxy rules.
+
+A new **“View Architecture”** button will appear on each container row, opening a modal that displays:
+
+- Container‑level topology  
+- Connected services  
+- Network boundaries  
+- Volume mounts  
+- Reverse‑proxy chains  
+- Upstream/downstream dependencies  
+
+This modal will also be accessible from inside the **Update Scheduler** modal via a compact **“View Diagram”** icon button.
+
+### **🔗 Dependency Mapping**  
+Automatically map relationships between containers, including:
+
+- Reverse proxy → service routing  
+- Database → application links  
+- VPN → client tunnels  
+- Multi‑container stack relationships  
+- Cross‑host dependencies (via Portainer endpoints)
+
+This provides a clear picture of how updates may impact the rest of the stack.
+
+### **🤖 AI‑Powered Upgrade Planning**  
+Create new **intelligence** service, with ability to use external local LLM as default, or optional Gemini and Copilot integrations, to analyze stack dependencies and generate an **optimal update sequence** that avoids downtime or broken chains.
+
+The scheduler will:
+
+- Reorder updates based on dependency graph  
+- Warn about breaking changes  
+- Suggest safe update windows  
+- Automatically apply the correct sequence when schedules run  
+
+---
+
+## **Phase 6 — Multi‑Backend Orchestration (Planned)**  
+Deckhand currently relies on the Portainer API as its orchestration layer. Phase 7 introduces a new abstraction layer that removes the hard dependency on Portainer and enables Deckhand to operate across multiple backend providers (while remaining fully **agentless**).
+
+Deckhand will evolve from a Portainer-specific tool into a universal container management engine. This phase introduces a **Provider Abstraction Layer** that prioritizes direct Docker communication while maintaining compatibility with popular orchestrators.
+
+#### **🐳 Direct Docker "Native" Engine**
+The core of Deckhand will move to the **Direct Docker API (Remote TLS/Socket)**. This makes Deckhand a standalone powerhouse for:
+- **Native Updates:** Pulling, recreating, and cleanup without a middleman.
+- **Volume Backups:** Direct access to volume management for Phase 4 features.
+- **Security Audits:** Direct inspection of container configurations and network exposures.
+
+#### **🔌 Orchestrator Adapters**
+To ensure Deckhand doesn't break the "Source of Truth" for users who prefer specific UIs, we will implement **Adapters**. These tell the orchestrator to perform the update so the UI stays in sync:
+- **Portainer Adapter** (Refactor of current logic)
+- **Dockge / Yacht / Dockhand Adapters** (Planned)
+
+#### **🌐 Unified Fleet Management**
+- **Backend-Agnostic discovery:** Manage a heterogeneous fleet where some hosts are raw Docker, some are Portainer endpoints, and others use Dockge.
+- **Multi-Host Aggregation:** A single Deckhand instance acting as a "Command Center" for your entire homelab, regardless of which management tools are installed on individual nodes.
+- **Agentless philosophy:** All communication remains remote and agentless, requiring only network/API access to the target hosts.
+
+---
+
+## **Phase 7 — Continue to Expand Functionality**
+- CVE scanning (Trivy integration, any others to consider?)  
+- Notifications (ntfy.shintegration, any others to consider?)
+- Enable MQTT publishing (TBD, tell me what to integrate!)  
+- Create Prometheus Exporter (A feature request for this and I will create an Exporter!)
+- **Exposed Ports Audit**  
+  - Identify containers exposing ports to LAN/WAN  
+  - Highlight reverse‑proxy boundaries  
+  - Surface weak or unintended network exposure  
+  - Integrate with existing security risk scoring  
+- **Open to other ideas! Drop me a feature request!**
 
 ---
 

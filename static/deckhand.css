@@ -266,6 +266,120 @@ button:hover {
     color: #ddd;
 }
 
+/* ---------------------------------------------------------
+   PHASE 2: EVENT FILTERS & TIMELINE
+--------------------------------------------------------- */
+.modal-filters {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 20px;
+    border-bottom: 1px solid #333;
+    padding-bottom: 15px;
+}
+
+.filter-btn {
+    background: #2a2d30;
+    border: 1px solid #444;
+    color: #aaa;
+    padding: 6px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    font-weight: 500;
+    transition: all 0.2s ease;
+}
+
+.filter-btn:hover {
+    background: #3a3d40;
+    color: #fff;
+}
+
+.filter-btn.active {
+    background: #007bff;
+    border-color: #007bff;
+    color: #fff;
+    box-shadow: 0 0 8px rgba(0, 123, 255, 0.3);
+}
+
+/* Timeline Styling */
+.timeline-item {
+    display: flex;
+    gap: 15px;
+    margin-bottom: 20px;
+    position: relative;
+}
+
+.timeline-item:not(:last-child)::after {
+    content: "";
+    position: absolute;
+    left: 14px;
+    top: 30px;
+    bottom: -20px;
+    width: 2px;
+    background: #333;
+}
+
+.timeline-marker {
+    width: 30px;
+    height: 30px;
+    background: #2a2d30;
+    border: 1px solid #444;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1;
+    font-size: 0.9rem;
+}
+
+.timeline-content {
+    flex: 1;
+    background: rgba(255,255,255,0.03);
+    padding: 12px;
+    border-radius: 8px;
+    border: 1px solid #333;
+}
+
+.timeline-header {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 8px;
+    font-size: 0.8rem;
+}
+
+.event-type {
+    font-weight: bold;
+    text-transform: uppercase;
+    color: #007bff;
+}
+
+.event-time {
+    color: #666;
+}
+
+.event-details {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 0;
+    padding: 0;
+    font-family: inherit;
+}
+
+.detail-chip {
+    background: #222;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    border: 1px solid #444;
+    color: #bbb;
+}
+
+.detail-chip b {
+    color: #eee;
+    margin-right: 4px;
+}
+
 .loading {
     position: fixed;
     inset: 0;
@@ -495,5 +609,25 @@ button:hover {
 
     input[type="number"]:focus {
         border-color: #0066cc;
+    }
+
+    .modal-filters {
+        border-bottom-color: #e0e0e0;
+    }
+
+    .filter-btn {
+        background: #eee;
+        border-color: #d0d0d0;
+        color: #666;
+    }
+
+    .filter-btn:hover {
+        background: #e0e0e0;
+    }
+
+    .filter-btn.active {
+        background: #0066cc;
+        border-color: #0066cc;
+        color: #fff;
     }
 }

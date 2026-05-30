@@ -1,7 +1,7 @@
 import requests
 import re
 from packaging import version
-from cache import cache
+from services.cache import cache
 
 # Homelab support: Suppress insecure request warnings for self-signed certificates
 import urllib3

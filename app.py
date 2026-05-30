@@ -8,10 +8,10 @@ import time
 from api.routes import api_blueprint
 
 # DB + Scheduler
-from db.database import init_db
+from services.database import init_db
 from scheduler.scheduler import init_scheduler
 
-#Deckhand Flask Application Factory
+# Deckhand Flask Application Factory
 def create_app():
     # Load environment variables from .env file for local development
     load_dotenv()
@@ -65,7 +65,7 @@ def create_app():
             response.headers['Expires'] = '0'
         return response
 
-    #Health check
+    # Health check
     @app.get("/health")
     def health():
         return {"status": "ok", "service": "deckhand"}
@@ -75,12 +75,7 @@ def create_app():
         ui_mode = app.config.get("UI_MODE", "fun")
         cache_bust = int(time.time())
         return render_template("deckhand.html", ui_mode=ui_mode, cache_bust=cache_bust)
-
-    @app.get("/beszel")
-    def beszel_ui():
-        beszel_url = os.getenv("BESZEL_URL", "http://beszel:8090")
-        return render_template("beszel.html", beszel_url=beszel_url)
-
+    
     return app
 
 # Local development entrypoint
