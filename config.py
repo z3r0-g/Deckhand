@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Application Version
-VERSION = "0.0.2"
+VERSION = os.getenv("APP_VERSION", "0.dev")
 
 # Portainer Configuration (REQUIRED)
 PORTAINER_URL = os.getenv("PORTAINER_URL", "").rstrip("/")

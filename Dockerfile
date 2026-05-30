@@ -3,9 +3,11 @@ WORKDIR /app
 
 #Set Environment Variables
 ARG BUILD_ID=0
+ARG APP_VERSION=0.0.2
 ARG PORT=5000
 ENV PORT=${PORT}
 ENV PYTHONUNBUFFERED=1
+ENV APP_VERSION=${APP_VERSION}
 
 #Install App Dependencies
 COPY requirements.txt ./
