@@ -1,10 +1,18 @@
 # 🛳️ Deckhand
-![Deckhand](static/Deckhand.png)
-### *Agentless Container Update Intelligence for Docker, Portainer & Dockge*
+<p align="center">
+  <a href="https://github.com/z3r0-g/Deckhand" target="_blank">
+    <img src="static/Deckhand.png" alt="Deckhand Logo" width="380">
+  </a>
+  <br>
+  <b>Agentless Container Update Intelligence for Docker, Portainer, and Dockge</b>
+  <br>
+  <img src="https://img.shields.io/github/license/z3r0-g/Deckhand?style=flat-square" alt="License">
+  <img src="https://img.shields.io/github/last-commit/z3r0-g/Deckhand?style=flat-square" alt="Last Commit">
+  <img src="https://img.shields.io/github/stars/z3r0-g/Deckhand?style=flat-square" alt="Stars">
+</p>
 
-Deckhand is a modern, lightweight, agentless replacement for **DIUN** and **Watchtower**, designed for homelab and small‑scale container environments that want a simple unified dashboard widget responsive to scaling. 
-
-Instead of automatically updating containers like Watchtower, Deckhand provides **intelligent monitoring**, **version awareness**, **CVE scoring**, and **manual or scheduled update controls** directly from any iFrame-capable Dashboard UI.
+Deckhand is a modern, lightweight, agentless monitoring and orchestration tool designed for homelab enthusiasts. It bridges the gap between passive notification tools and fully automated update scripts, providing a unified "Command Center" for your container fleet.
+Unlike tools that update blindly, Deckhand provides **version delta awareness**, **digest mismatch detection**, and **manual/scheduled triggers**—all accessible via a responsive UI designed to be iFramed into dashboards like Homarr, Dashy, or Organizr.
 
 ---
 
@@ -12,65 +20,45 @@ Instead of automatically updating containers like Watchtower, Deckhand provides 
 
 ### 🔍 **Agnostic Lifecycle Orchestration**
 Deckhand is provider-agnostic. It automatically discovers, monitors, and manages containers across:
-
 - **Docker Engine:** Local socket (`/var/run/docker.sock`) or remote API.
 - **Portainer:** Full environment aggregation and endpoint management.
 - **Dockge:** Specialized Docker Compose stack management.
+- **Arcane & Dockhand:** Native support for secure orchestrators.
 
 Once discovered, Deckhand performs updates (pull, stop, remove, recreate) using the specific API of your detected backend without requiring host agents or sidecars.
 
 ---
 
 ### 🏷️ **Registry Polling (DIUN Replacement)**
-Deckhand polls container registries to detect:
-
-- New tags  
-- New digests  
-- Semantic version changes  
-- Patch/minor/major deltas  
-- Deprecated or removed tags  
+Deckhand polls container registries to detect new tags, digests, and semantic version changes (Patch/Minor/Major deltas). This replaces the need for sidecars like DIUN while providing a much richer UI.
 
 Supports:
-
 - Docker Hub  
 - GHCR  
+- LinuxServer.io (lscr.io)
 - **Private Registries** (via Provider-level authentication)
 
 ---
-
-### 🛡️ **CVE‑Aware Intelligence**
-Deckhand optionally integrates with **Trivy** to scan images and extract:
-
-- Highest CVE severity  
-- Critical CVE count  
-- Patched version (if available)  
-- Vulnerability metadata  
-
-CVE data is merged with version delta to determine severity.
-
----
-
-### 🎨 **Heat-Based Update Status**
-
-Deckhand uses an intuitive "heat" system to indicate update urgency. The UI supports two modes:
+### 🎨 **Urgency Intelligence: The Heat System**
+Deckhand uses an intuitive "heat" system to indicate update urgency, supporting both professional and personality-driven modes.
 
 **Professional Mode:**
 | Heat | Meaning | Icon | Condition |
 |------|---------|------|-----------|
-| 0 | Up to date | ✔️ | No updates available |
-| 1 | Patch available | ⬆️ | Patch version update |
-| 2 | Minor available | 🔧 | Minor version update |
-| 3 | Major available | ⚠️ | Major version update |
-| 4 | Critical | 🔥 | Critical update or vulnerabilities |
+| 0 | Up to Date | ✔️ | Local matches Registry |
+| 1 | Patch | ⬆️ | Patch version change |
+| 2 | Minor | 🔧 | Minor version change |
+| 3 | Major | ⚠️ | Major version change |
+| 4 | Critical | 🔥 | Critical CVEs detected |
 
 **Fun Mode:**
 | Heat | Meaning | Icon | Condition |
 |------|---------|------|-----------|
-| 0 | Cool | 🧊 | Chillin' (up to date) |
-| 1 | Warm | 🌡️ | A little spicy (patch) |
-| 2 | Hot | 🔥 | Getting toasty (minor) |
-| 3 | Burning | ⚠️🔥 | This is fine 🔥🐶 (major) |
-| 4 | Streaming | 🌋 | Meltdown imminent (critical) |
+| 0 | Cool | 🧊 | Chillin' |
+| 1 | Warm | 🌡️ | A little spicy |
+| 2 | Hot | 🔥 | Getting toasty |
+| 3 | Burning | ⚠️🔥 | This is fine 🔥🐶 |
+| 4 | Streaming | 🌋 | Meltdown imminent |
 
 ---
 
@@ -78,12 +66,11 @@ Deckhand uses an intuitive "heat" system to indicate update urgency. The UI supp
 Deckhand exposes a clean, responsive UI:
 
 - **Update Now** — Immediately pull and deploy the latest image  
-- **View Version History** — See all previous updates  
+- **Audit Log** — View historical version bumps and digest changes
 - **Show/Hide Updates** — Filter to only show containers with updates  
-- **Refresh Status** — Force a registry scan and state refresh
-- **Scheduler** — Configure automatic updates (Phase 1+)  
+- **Scheduler** — Define update rings (Auto, Manual, or Ignore)
 
-All actions are performed through Deckhand’s API and executed via the detected orchestration backend (Docker, Portainer, or Dockge).
+All actions are executed via the detected orchestration backend, ensuring your stacks remain in sync with your provider of choice.
 
 ---
 
@@ -92,17 +79,15 @@ All actions are performed through Deckhand’s API and executed via the detected
 ### 🕒 **Built‑In Scheduler**
 Deckhand includes a flexible scheduler supporting:
 
-- Interval-based automatic updates  
-- Skip lists (per-container)  
-- Event logging  
-
-Advanced cron expressions and CVE-triggered updates are planned for later phase.
+*   Interval-based automatic updates  
+*   Per-container policy overrides (Auto, Manual, Ignore)
+*   Full audit logging of automated actions
 
 ---
 
 ### 📦 **Lightweight & Self‑Contained**
 Deckhand runs as a single container:
-
+- Python/Flask Backend
 - Flask backend  
 - SQLite WAL database  
 - Zero agents  
@@ -113,10 +98,8 @@ Deckhand runs as a single container:
 ## 📸 Screenshots
 
 | ![Default View](screenshots/default.png) | ![Unfiltered View](screenshots/unfilter.png) |
-|:---:|:---:|
-| *Default View* | *Unfiltered View* |
-
-
+|:----------------------------------------:|:------------------------------------------:|
+|              *Default View*              |             *Unfiltered View*              |
 
 ---
 
@@ -509,13 +492,14 @@ Apache 2.0
 
 ---
 
-## ⭐ Acknowledgements
+## ⭐ Acknowledgements & Inspiration
 
-Deckhand is inspired by the strengths of:
+Deckhand is proud to integrate with and be inspired by the following projects:
+*   [Portainer](https://www.portainer.io/) - For environment management.
+*   [DIUN](https://crazy-max.github.io/diun/) - For registry polling standards.
+*   [Watchtower](https://containrrr.dev/watchtower/) - For the update logic we love.
+*   [Dockge](https://github.com/louislam/dockge) - For making Docker Compose elegant.
+*   [Homarr](https://homarr.dev/) - For the dashboard ecosystem.
+*   [LinuxServer.io](https://www.linuxserver.io/) - For container standardization.
 
-- Portainer  
-- DIUN  
-- Watchtower  
-- Homarr  
-
-…but built to solve the gaps between them with a clean, modern, agentless approach to Container Update Management.
+Built to solve the gaps between them with a clean, modern, agentless approach.

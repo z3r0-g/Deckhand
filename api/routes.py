@@ -3,15 +3,16 @@ from services.registry_poller import RegistryPoller
 from services.cache import cache
 from services.intelligence import evaluate_container_intelligence
 from services.database import (
-    upsert_container, 
-    log_event, 
-    get_all_schedule_rules, 
-    add_update_history, 
-    get_update_history, 
+    upsert_container,
+    log_event,
+    get_all_schedule_rules,
+    add_update_history,
+    get_update_history,
     get_events_for_container,
     set_schedule_rule
 )
 from services.integrations import manager
+from services.health_monitor import health_monitor
 import json
 import time
 
@@ -22,7 +23,23 @@ api_blueprint = Blueprint("api", __name__)
 # ---------------------------------------------------------
 @api_blueprint.get("/hosts")
 def get_hosts():
-    return jsonify(manager.get_all_endpoints())
+    endpoints = manager.get_all_endpoints()
+
+    # Enrich endpoints with health status
+    for ep in endpoints:
+        provider_name = ep.get("_provider", "")
+        health = health_monitor.get_provider_status(provider_name)
+        if health:
+            ep["health"] = health
+        else:
+            ep["health"] = {
+                "status": "unknown",
+                "last_check": None,
+                "error_message": None,
+                "consecutive_failures": 0
+            }
+
+    return jsonify(endpoints)
 
 
 # ---------------------------------------------------------
@@ -270,8 +287,9 @@ def container_events(container_id):
 @api_blueprint.get("/containers/status")
 def containers_status():
     """
-    Aggregates container status across all endpoints, performs registry 
-    polling, and triggers intelligence evaluation.
+    Aggregates container status across all endpoints, performs registry
+    polling, and triggers intelligence evaluation. Gracefully continues
+    if individual providers fail.
     """
     from scheduler.scheduler import load_scheduler_config
     cfg = load_scheduler_config()
@@ -279,6 +297,7 @@ def containers_status():
     rules = get_all_schedule_rules()
     poller = RegistryPoller()
     results = []
+    provider_errors = []
 
     endpoints = manager.get_all_endpoints()
     current_app.logger.info(f"Integration Discovery: Found {len(endpoints)} endpoints across configured providers")
@@ -286,12 +305,29 @@ def containers_status():
     for ep in endpoints:
         ep_id = ep.get("Id")
         ep_name = ep.get("Name")
-        provider = manager.get_provider(ep.get("_provider"))
+        provider_name = ep.get("_provider")
+        provider = manager.get_provider(provider_name)
 
-        containers = provider.list_containers(ep_id)
+        try:
+            containers = provider.list_containers(ep_id)
+        except Exception as e:
+            error_msg = str(e)
+            current_app.logger.error(f"Provider {provider_name} failed to list containers: {error_msg}")
+            health_monitor.record_failure(provider_name, error_msg)
+            provider_errors.append({
+                "provider": provider_name,
+                "endpoint_id": ep_id,
+                "endpoint_name": ep_name,
+                "error": error_msg
+            })
+            continue
+
         if not isinstance(containers, list):
             current_app.logger.warning(f"Endpoint {ep_name} (ID: {ep_id}) returned non-list containers: {containers}")
             continue
+
+        # Record success for this provider
+        health_monitor.record_success(provider_name)
 
         for c in containers:
             cid = c.get("Id")
@@ -350,18 +386,26 @@ def containers_status():
                 "stack": stack_name,
                 "policy": rules.get(cid, {}).get('policy', 'manual')
             }
-            
+
             # Trigger Intelligence Evaluation
             evaluate_container_intelligence(container_data)
-            
+
             # PHASE 2: Fleet State Persistence
             upsert_container(container_data)
-            
+
             results.append(container_data)
+
+    # Log provider errors summary
+    if provider_errors:
+        current_app.logger.warning(f"Provider failures during status aggregation: {len(provider_errors)} endpoint(s) failed")
+        for err in provider_errors:
+            current_app.logger.warning(
+                f"  - Provider '{err['provider']}' ({err['endpoint_name']}): {err['error']}"
+            )
 
     # Cache the full status for the SSE stream to consume
     cache.set("container_status", results, ttl=300)
-    
+
     return jsonify(results)
 
 # ---------------------------------------------------------

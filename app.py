@@ -6,9 +6,21 @@ load_dotenv()
 
 from urllib.parse import urlparse
 import time
+import logging
+
+# Logging setup
+from utils.logging import configure_logging, get_logger
+log_level = os.getenv("LOG_LEVEL", "INFO")
+log_path = os.getenv("LOG_PATH", None)
+configure_logging(log_path=log_path, log_level=log_level)
+logger = get_logger(__name__)
+logger.info(f"Logging initialized: level={log_level}, file_output={bool(log_path)}")
 
 # Blueprint
 from api.routes import api_blueprint
+
+# Config validation
+from utils.config_validator import ConfigValidator
 
 # DB + Scheduler
 from services.database import init_db
@@ -34,8 +46,15 @@ def create_app():
 
     # Validate Integrations
     if not manager.is_configured():
-        app.logger.error("No container orchestration providers (Portainer, Dockge, or Docker Socket) detected. "
-                         "Please check your environment variables.")
+        logger.error("No container orchestration providers (Portainer, Dockge, or Docker Socket) detected. "
+                     "Please check your environment variables.")
+
+    # Validate configuration
+    validator = ConfigValidator()
+    validation_results = validator.validate()
+    if not validator.has_valid_providers():
+        logger.error("No valid container orchestration providers detected after validation. Cannot proceed.")
+        raise RuntimeError("No valid container orchestration providers configured")
 
     # Initialize SQLite database
     init_db(app)

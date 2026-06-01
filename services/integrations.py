@@ -1,4 +1,5 @@
 import os
+import logging
 try:
     import docker
     DOCKER_LIB_AVAILABLE = True
@@ -9,6 +10,9 @@ from integrations.portainer import PortainerClient
 from integrations.dockge import DockgeClient
 from integrations.arcane import ArcaneClient
 from integrations.dockhand import DockhandClient
+from services.health_monitor import health_monitor
+
+logger = logging.getLogger(__name__)
 
 class IntegrationProvider:
     """Base interface for all container orchestration providers."""
@@ -68,8 +72,60 @@ class IntegrationProvider:
         new_id = created.get("Id")
         log_step("Starting container", new_id)
         self.start_container(endpoint_id, new_id)
-        
+
         return {"Id": new_id, "status": "ok", "log": log}
+
+class HealthMonitoredProvider(IntegrationProvider):
+    """Wrapper that monitors provider health and records metrics."""
+    def __init__(self, provider, provider_name, provider_type):
+        self.provider = provider
+        self.provider_name = provider_name
+        self.provider_type = provider_type
+        health_monitor.register_provider(provider_name, provider_type)
+
+    def _call_with_health_tracking(self, method_name, *args, **kwargs):
+        """Call provider method and track health."""
+        try:
+            method = getattr(self.provider, method_name)
+            result = method(*args, **kwargs)
+            health_monitor.record_success(self.provider_name)
+            return result
+        except Exception as e:
+            health_monitor.record_failure(self.provider_name, str(e))
+            raise
+
+    def list_endpoints(self):
+        return self._call_with_health_tracking("list_endpoints")
+
+    def list_containers(self, endpoint_id):
+        return self._call_with_health_tracking("list_containers", endpoint_id)
+
+    def inspect_container(self, endpoint_id, container_id):
+        return self._call_with_health_tracking("inspect_container", endpoint_id, container_id)
+
+    def pull_image(self, endpoint_id, image, tag):
+        return self._call_with_health_tracking("pull_image", endpoint_id, image, tag)
+
+    def stop_container(self, endpoint_id, container_id):
+        return self._call_with_health_tracking("stop_container", endpoint_id, container_id)
+
+    def remove_container(self, endpoint_id, container_id):
+        return self._call_with_health_tracking("remove_container", endpoint_id, container_id)
+
+    def create_container(self, endpoint_id, name, config):
+        return self._call_with_health_tracking("create_container", endpoint_id, name, config)
+
+    def start_container(self, endpoint_id, container_id):
+        return self._call_with_health_tracking("start_container", endpoint_id, container_id)
+
+    def get_images(self, endpoint_id, filters=None):
+        return self._call_with_health_tracking("get_images", endpoint_id, filters)
+
+    def prune_images(self, endpoint_id, prune_all=False):
+        return self._call_with_health_tracking("prune_images", endpoint_id, prune_all)
+
+    def execute_container_update(self, endpoint_id, container_id, image, tag, inspect_data):
+        return self._call_with_health_tracking("execute_container_update", endpoint_id, container_id, image, tag, inspect_data)
 
 class PortainerProvider(IntegrationProvider):
     def __init__(self, url, key):
@@ -361,13 +417,15 @@ class IntegrationManager:
                 if os.path.exists(path):
                     d_host = f"unix://{path}"
                     break
-        
+
         if d_host and DOCKER_LIB_AVAILABLE:
-            self.providers["native"] = DockerProvider(d_host)
+            docker_provider = DockerProvider(d_host)
+            self.providers["native"] = HealthMonitoredProvider(docker_provider, "native", "docker")
+            logger.info(f"Initialized provider: native (docker)")
 
         # 2. Portainer (Multi-host support: PORTAINER_URL, PORTAINER_1_URL, etc)
         self._discover_multi("portainer", "PORTAINER", PortainerProvider)
-            
+
         # 3. Dockge (Multi-host support: DOCKGE_URL, DOCKGE_1_URL, etc)
         self._discover_multi("dockge", "DOCKGE", DockgeProvider)
 
@@ -384,7 +442,9 @@ class IntegrationManager:
         key = os.getenv(f"{env_prefix}_API_KEY")
         if url and key:
             if "://" not in url: url = f"http://{url}"
-            self.providers[provider_prefix] = provider_class(url.rstrip("/"), key)
+            provider = provider_class(url.rstrip("/"), key)
+            self.providers[provider_prefix] = HealthMonitoredProvider(provider, provider_prefix, provider_prefix)
+            logger.info(f"Initialized provider: {provider_prefix}")
 
         # Check numbered instances (1 to 10)
         for i in range(1, 11):
@@ -392,7 +452,10 @@ class IntegrationManager:
             key = os.getenv(f"{env_prefix}_{i}_API_KEY")
             if url and key:
                 if "://" not in url: url = f"http://{url}"
-                self.providers[f"{provider_prefix}_{i}"] = provider_class(url.rstrip("/"), key)
+                provider = provider_class(url.rstrip("/"), key)
+                provider_name = f"{provider_prefix}_{i}"
+                self.providers[provider_name] = HealthMonitoredProvider(provider, provider_name, provider_prefix)
+                logger.info(f"Initialized provider: {provider_name}")
 
     def is_configured(self):
         """Returns True if at least one integration provider is enabled."""

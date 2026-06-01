@@ -1,6 +1,9 @@
 import json
 import os
+import logging
 from flask_apscheduler import APScheduler
+
+logger = logging.getLogger(__name__)
 
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), "scheduler_config.json")
 
@@ -26,6 +29,18 @@ def init_scheduler(app):
             minutes=interval,
             replace_existing=True
         )
+
+    # Database maintenance job (runs daily by default)
+    db_prune_interval_hours = int(os.getenv("DB_PRUNE_INTERVAL_HOURS", 24))
+    scheduler.add_job(
+        id="deckhand_db_maintenance",
+        func=run_db_maintenance,
+        trigger="interval",
+        hours=db_prune_interval_hours,
+        replace_existing=True
+    )
+
+    logger.info(f"Scheduler initialized: update_scheduler={'enabled' if cfg.get('enabled') else 'disabled'}, db_maintenance interval={db_prune_interval_hours}h")
 
     scheduler.start()
 
@@ -164,3 +179,22 @@ def _perform_update(provider, poller, ep_id, container, poll_result):
         old_digest=old_digest,
         new_digest=new_digest
     )
+
+
+# ---------------------------------------------------------
+# DATABASE MAINTENANCE JOB
+# ---------------------------------------------------------
+def run_db_maintenance():
+    """
+    Runs database maintenance: prune old events/history, cleanup stale containers.
+    Triggered by scheduler on configured interval (default: daily).
+    """
+    from services.db_maintenance import execute_maintenance
+
+    db_retention_days = int(os.getenv("DB_RETENTION_DAYS", 90))
+    stale_days = int(os.getenv("DB_STALE_DAYS", 30))
+
+    result = execute_maintenance(db_retention_days=db_retention_days, stale_days=stale_days)
+
+    logger.info(f"Database maintenance completed: {result}")
+

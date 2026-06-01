@@ -1,7 +1,11 @@
 import requests
 import re
+import logging
 from packaging import version
 from services.cache import cache
+from utils.rate_limiter import rate_limiter
+
+logger = logging.getLogger(__name__)
 
 # Homelab support: Suppress insecure request warnings for self-signed certificates
 import urllib3
@@ -66,15 +70,36 @@ class RegistryPoller:
                 "heat": heat,
             }
 
+        # Check rate limiting for this registry
+        registry_host = self._extract_registry_host(repo, registry)
+        if rate_limiter.should_limit(registry_host):
+            wait_time = rate_limiter.get_wait_time(registry_host)
+            logger.warning(
+                f"Registry {registry_host} is rate limited, waiting {wait_time}s before retry. "
+                f"Returning cached data or error."
+            )
+            return {
+                "error": "rate_limited",
+                "image": image_ref,
+                "repo": repo,
+                "current_tag": current_tag,
+                "latest_tag": None,
+                "digest_current": None,
+                "digest_latest": None,
+                "version_delta": None,
+                "heat": 0,
+                "wait_seconds": wait_time,
+            }
+
         try:
             if registry == "dockerhub":
-                result = self._poll_dockerhub(repo, current_tag)
+                result = self._poll_dockerhub(repo, current_tag, registry_host)
             elif registry == "ghcr":
-                result = self._poll_ghcr(repo, current_tag)
+                result = self._poll_ghcr(repo, current_tag, registry_host)
             elif registry == "lscr":
-                result = self._poll_lscr(repo, current_tag)
+                result = self._poll_lscr(repo, current_tag, registry_host)
             else:
-                result = self._poll_private(registry, repo, current_tag)
+                result = self._poll_private(registry, repo, current_tag, registry_host)
 
             latest_tag = result.get("latest_tag")
             digest_current = result.get("digest_current")
@@ -92,6 +117,9 @@ class RegistryPoller:
             result["repo"] = repo
             result["current_tag"] = current_tag
             result["heat"] = heat
+
+            # Record success for rate limiter
+            rate_limiter.record_success(registry_host)
 
             cache.set(cache_key, result, self.ttl)
             return result
@@ -206,16 +234,31 @@ class RegistryPoller:
         except Exception:
             return None
 
+    def _extract_registry_host(self, repo, registry_type):
+        """Extract registry hostname for rate limiting tracking."""
+        if registry_type == "dockerhub":
+            return "registry.hub.docker.com"
+        elif registry_type == "ghcr":
+            return "ghcr.io"
+        elif registry_type == "lscr":
+            return "lscr.io"
+        else:
+            # Private registry - use the registry type as hostname
+            return registry_type
+
     # ---------------------------------------------------------
     # Docker Hub
     # ---------------------------------------------------------
 
-    def _poll_dockerhub(self, repo, current_tag):
+    def _poll_dockerhub(self, repo, current_tag, registry_host):
         tags = []
         url = f"https://registry.hub.docker.com/v2/repositories/{repo}/tags?page_size=100"
 
         while url:
             r = requests.get(url, timeout=10, verify=False)
+            if r.status_code == 429:
+                rate_limiter.record_429(registry_host)
+                raise Exception(f"Rate limited by Docker Hub (429)")
             if r.status_code != 200:
                 break
 
@@ -256,13 +299,16 @@ class RegistryPoller:
     # GHCR
     # ---------------------------------------------------------
 
-    def _poll_ghcr(self, repo, current_tag):
+    def _poll_ghcr(self, repo, current_tag, registry_host):
         prefix = "ghcr.io/"
         repo_path = repo[len(prefix):] if repo.startswith(prefix) else repo
 
         tags_url = f"https://ghcr.io/v2/{repo_path}/tags/list"
         try:
             r = requests.get(tags_url, timeout=10, verify=False)
+            if r.status_code == 429:
+                rate_limiter.record_429(registry_host)
+                raise Exception(f"Rate limited by GHCR (429)")
             tags = r.json().get("tags", []) if r.status_code == 200 else []
         except Exception:
             tags = []
@@ -297,7 +343,7 @@ class RegistryPoller:
     # lscr.io (LinuxServer.io)
     # ---------------------------------------------------------
 
-    def _poll_lscr(self, repo, current_tag):
+    def _poll_lscr(self, repo, current_tag, registry_host):
         prefix = "lscr.io/"
         repo_path = repo[len(prefix):] if repo.startswith(prefix) else repo
 
@@ -308,6 +354,9 @@ class RegistryPoller:
 
         try:
             r = requests.get(url, headers=headers, timeout=10, verify=False)
+            if r.status_code == 429:
+                rate_limiter.record_429(registry_host)
+                raise Exception(f"Rate limited by lscr.io (429)")
             tags = r.json().get("tags", []) if r.status_code == 200 else []
         except Exception:
             tags = []
@@ -344,15 +393,18 @@ class RegistryPoller:
     # Private Registry
     # ---------------------------------------------------------
 
-    def _poll_private(self, registry, repo, current_tag):
+    def _poll_private(self, registry, repo, current_tag, registry_host):
         repo_path = repo.split("/", 1)[1]
-        
+
         # Try HTTPS first, but stay flexible for local registries
         base = f"https://{registry}/v2/{repo_path}"
         tags_url = f"{base}/tags/list"
 
         try:
             r = requests.get(tags_url, timeout=10, verify=False)
+            if r.status_code == 429:
+                rate_limiter.record_429(registry_host)
+                raise Exception(f"Rate limited by {registry} (429)")
             if r.status_code == 200:
                 tags = r.json().get("tags", [])
             else:
@@ -362,6 +414,9 @@ class RegistryPoller:
                 base = f"http://{registry}/v2/{repo_path}"
                 try:
                     r = requests.get(f"{base}/tags/list", timeout=10, verify=False)
+                    if r.status_code == 429:
+                        rate_limiter.record_429(registry_host)
+                        raise Exception(f"Rate limited by {registry} (429)")
                     tags = r.json().get("tags", []) if r.status_code == 200 else []
                 except Exception:
                     tags = []

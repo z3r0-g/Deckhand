@@ -58,14 +58,11 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ needs.PREP.outputs.image_name }}
           tags: |
+            type=raw,value=v${{ env.APP_VERSION }}.${{ github.run_number }}
             type=raw,value=v${{ env.APP_VERSION }},enable=${{ github.ref == 'refs/heads/main' }}
-            type=ref,event=branch
-            type=ref,event=pr
-            type=sha,format=short,prefix=${{ env.APP_VERSION }}-sha-
-            type=semver,pattern=v{{version}}
-            type=semver,pattern=v{{major}}.{{minor}}
-          flavor: |
-            latest=true
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' && github.event_name != 'pull_request' }}
+            type=sha,format=short
+            type=ref,event=branch,enable=${{ github.event_name == 'push' }}
 
       # FULL NO‑CACHE BUILD (forces rebuild of every layer with fresh repo files)
       - name: Create & Push Docker Image
