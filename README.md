@@ -1,26 +1,23 @@
 # 🛳️ Deckhand
 ![Deckhand](static/Deckhand.png)
-### *Agentless Container Update Intelligence for Portainer*
+### *Agentless Container Update Intelligence for Docker, Portainer & Dockge*
 
-Deckhand is a modern, lightweight, agentless replacement for **DIUN** and **Watchtower**, designed for homelab and small‑scale container environments that use **Portainer** for orchestration and want a simple unified dashboard widget that is responsive to scaling.
+Deckhand is a modern, lightweight, agentless replacement for **DIUN** and **Watchtower**, designed for homelab and small‑scale container environments that want a simple unified dashboard widget responsive to scaling. 
 
-Instead of automatically updating containers like Watchtower, Deckhand provides **intelligent monitoring**, **version awareness**, **CVE scoring**, and **manual or scheduled update controls** directly from any iFrame capable Dashboard UI (but designed specifically for iFrame embedding Portainer Update Manager in Homarr).
+Instead of automatically updating containers like Watchtower, Deckhand provides **intelligent monitoring**, **version awareness**, **CVE scoring**, and **manual or scheduled update controls** directly from any iFrame-capable Dashboard UI.
 
 ---
 
 ## 🚀 Features
 
-### 🔍 **Agentless Container Discovery**
-Deckhand connects directly to the **Portainer API** to discover:
+### 🔍 **Agnostic Lifecycle Orchestration**
+Deckhand is provider-agnostic. It automatically discovers, monitors, and manages containers across:
 
-- Containers  
-- Stacks  
-- Image tags  
-- Image digests  
-- Registry credentials  
-- Endpoint metadata  
+- **Docker Engine:** Local socket (`/var/run/docker.sock`) or remote API.
+- **Portainer:** Full environment aggregation and endpoint management.
+- **Dockge:** Specialized Docker Compose stack management.
 
-No sidecars, no host agents, no Docker socket mounts.
+Once discovered, Deckhand performs updates (pull, stop, remove, recreate) using the specific API of your detected backend without requiring host agents or sidecars.
 
 ---
 
@@ -37,7 +34,7 @@ Supports:
 
 - Docker Hub  
 - GHCR  
-- Private Registries (via Portainer Auth)
+- **Private Registries** (via Provider-level authentication)
 
 ---
 
@@ -83,23 +80,12 @@ Deckhand exposes a clean, responsive UI:
 - **Update Now** — Immediately pull and deploy the latest image  
 - **View Version History** — See all previous updates  
 - **Show/Hide Updates** — Filter to only show containers with updates  
-- **Refresh** — Force a registry scan  
+- **Refresh Status** — Force a registry scan and state refresh
 - **Scheduler** — Configure automatic updates (Phase 1+)  
 
-All actions are performed through Deckhand’s API and executed via Portainer.
+All actions are performed through Deckhand’s API and executed via the detected orchestration backend (Docker, Portainer, or Dockge).
 
 ---
-
-### 🔧 **Portainer‑Driven Updates (Watchtower Replacement)**
-Deckhand performs updates using the Portainer API:
-
-- Pull new image  
-- Recreate container  
-- Redeploy stack  
-- Restart services  
-- Log update events  
-
-Deckhand never mutates your system without your explicit approval.
 
 ---
 
@@ -110,7 +96,7 @@ Deckhand includes a flexible scheduler supporting:
 - Skip lists (per-container)  
 - Event logging  
 
-Advanced cron expressions and CVE-triggered updates are planned for Phase 2+.
+Advanced cron expressions and CVE-triggered updates are planned for later phase.
 
 ---
 
@@ -154,31 +140,28 @@ Scalable User Interface, intended to be iFramed into Homarr or any other dashboa
 ## 📚 API Overview
 
 ### `GET /api/hosts`
-List Portainer host endpoints.
+List all discovered orchestration endpoints (Docker, Portainer, Dockge).
 
-### `GET /api/containers`
-Return all containers from Portainer.
+### `GET /api/containers` (Internal)
+Return all raw container data from all providers.
 
-### `POST /api/containers/scan`
+### `GET /api/containers/scan`
 Force a full registry + CVE scan.
 
-### `GET /api/status`
+### `GET /api/containers/status`
 Return all containers with status, version delta, and CVE data.
 
 ### `POST /api/containers/{id}/update`
-Trigger a Portainer‑managed (Watchtower-style) update flow for a single container by ID (full or prefix).
+Trigger a Watchtower-style update flow for a single container by ID (full or prefix).
 
 Query Param:
 `endpoint_id` (optional) - to restrict search to specific host
 
-### `GET /api/containers/status`
-Dashboard friendly flattened status feed.
+### `POST /api/scheduler/rules`
+Create or modify an update policy (`auto`, `manual`, `ignore`) for a specific container or stack.
 
-### TODO: `POST /api/containers/{id}/schedule`
-Create or modify an update schedule.
-
-### TODO: `POST /api/containers/{id}/ignore`
-Ignore a specific version.
+### `POST /api/scheduler/config`
+Update global scheduler settings (interval, master enable).
 
 
 ---
@@ -187,12 +170,12 @@ Ignore a specific version.
 Deckhand uses a lightweight, high‑performance SQLite database (WAL mode) to store container metadata, CVE results, schedules, and event history.
 
 ### `containers`
-Tracks the current state of every discovered container across all Portainer endpoints.
+Tracks the current state of every discovered container across all managed endpoints.
 
 | Column | Type | Description |
 |:---|:---|:---|
 | `id` | INTEGER | PRIMARY KEY |
-| `host` | TEXT | Portainer endpoint name or ID |
+| `host` | TEXT | Endpoint name (Docker host, Portainer env, etc.) |
 | `container_name` | TEXT | Name of the discovered container |
 | `image_repo` | TEXT | e.g. "linuxserver/sonarr" |
 | `current_tag` | TEXT | Tag currently deployed |
@@ -221,17 +204,16 @@ Audit log of all actions and detections performed by Deckhand.
 
 ---
 
-### `schedules`
-Stores user‑defined update schedules for containers.
+### `schedule_rules`
+Stores user‑defined update policies for containers and stacks.
 
 | Column | Type | Description |
 |:---|:---|:---|
 | `id` | INTEGER | PRIMARY KEY |
-| `container_id` | INTEGER | ID of the container |
-| `cron_expression` | TEXT | Cron expression for updates |
-| `enabled` | BOOLEAN | Whether the schedule is active |
-| `created_at` | DATETIME | Creation timestamp |
-
+| `target_id` | TEXT | Container ID or Stack Name |
+| `target_type` | TEXT | 'container' or 'stack' |
+| `policy` | TEXT | 'auto', 'manual', or 'ignore' |
+| `updated_at` | DATETIME | Last modification timestamp |
 
 ---
 
@@ -240,9 +222,8 @@ Stores user‑defined update schedules for containers.
 ### Prerequisites
 
 - **Docker** & **Docker Compose** (because why else do you want this project?)
-- **Portainer** 2.0+ (Deckhand relies on a Portainer API Key to operate, which is created in Portainer UI, under 'My Account' → 'Access Tokens' (example: `https://portainer:9000/#!/account`)
 
-### Quick Start (Docker Compose)
+### Quick Start
 ```yaml
 services:
   deckhand:
@@ -252,13 +233,12 @@ services:
     ports:
       - "5000:5000"
     volumes:
-      - deckhand-db:/app
+      - deckhand-db:/app/data
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     environment:
       - FLASK_ENV=production
-      - PORTAINER_URL=https://your-portainer-host:9000
-      - PORTAINER_API_KEY=ptr_your_api_key_here
       - DECKHAND_UI_MODE=fun
-      - DATABASE_PATH=/app/deckhand.db
+      - DATABASE_PATH=/app/data/deckhand.db
     security_opt:
       - no-new-privileges:true
     healthcheck:
@@ -274,24 +254,10 @@ volumes:
 ```
 
 **Steps:**
-1. Open Portainer → Stacks → Add Stack
-2. Paste the YAML above
-3. Fill in your `PORTAINER_URL` and `PORTAINER_API_KEY`
-4. Name it `deckhand` and deploy
-5. Access at `http://<your-docker-host>:5000`
-
-### Embedding in Homarr
-
-Deckhand is designed for iframe embedding:
-
-```html
-<iframe
-  src="http://deckhand:5000"
-  style="width: 100%; height: 600px; border: none; border-radius: 8px;"
-/>
-```
-
-In **Homarr**, add a custom HTML widget with the above code.
+1. Create a `docker-compose.yml` with the content above.
+2. (Optional) Add environment variables for Portainer or Dockge if you wish to manage remote endpoints or stacks.
+3. Run `docker compose up -d`.
+4. Access the UI at `http://localhost:5000`.
 
 ---
 
@@ -300,27 +266,32 @@ In **Homarr**, add a custom HTML widget with the above code.
 ## ⚙️ Configuration
 
 All configuration is managed via **environment variables** (see `.env.example` for defaults).
+Deckhand is **Zero-Config** by default when running on a local Docker host with the socket mounted.
 
-### Required Environment Variables
+### Environment Variables
 
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `PORTAINER_URL` | Portainer API endpoint | `https://portainer.example.com:9000` |
-| `PORTAINER_API_KEY` | Portainer API key (from UI Settings) | `ptr_xxxxx...` |
+| Category | Variable | Description |
+|----------|----------|-------------|
+| **General** | `DECKHAND_UI_MODE` | UI theme (`fun` or `pro`) |
+| | `DATABASE_PATH` | SQLite database location |
+| | `SECRET_KEY` | Flask session key (auto-generated if missing) |
+| **Docker Engine** | `DOCKER_HOST` | Remote Docker API URL (e.g., `tcp://10.0.0.5:2375`) |
+| **Portainer** | `PORTAINER_URL` | Portainer API endpoint (e.g., `https://portainer:9443`) |
+| | `PORTAINER_API_KEY` | Portainer API key (Format: `ptr_...`) |
+| | `PORTAINER_X_URL` | Additional instances (e.g., `PORTAINER_1_URL`, `PORTAINER_2_URL`) |
+| **Dockge** | `DOCKGE_URL` | Dockge API endpoint (e.g., `http://dockge:5001`) |
+| | `DOCKGE_API_KEY` | Dockge API key |
+| | `DOCKGE_X_URL` | Additional instances (e.g., `DOCKGE_1_URL`, `DOCKGE_2_URL`) |
+| **Arcane** | `ARCANE_URL` | Arcane API endpoint (e.g., `http://arcane:8080`) |
+| | `ARCANE_API_KEY` | Arcane API key |
+| | `ARCANE_X_URL` | Additional instances (e.g., `ARCANE_1_URL`) |
+| **Dockhand** | `DOCKHAND_URL` | Dockhand API endpoint (e.g., `http://dockhand:8080`) |
+| | `DOCKHAND_API_KEY` | Dockhand API key |
+| | `DOCKHAND_X_URL` | Additional instances (e.g., `DOCKHAND_1_URL`) |
 
-### Optional Environment Variables
+---
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `DECKHAND_UI_MODE` | `fun` | UI theme (`fun` or `minimal`) |
-| `DATABASE_PATH` | `deckhand.db` | SQLite database location |
-| `SECRET_KEY` | `dev-key-change-in-production` | Flask session key (change in production) |
-| `FLASK_ENV` | `production` | Flask environment |
-
-### Development
-
-For local development:
-**Note:** This project requires **Python 3.14+**.
+**Note:** This project is configured to use a **.devcontainer** but can be started manually as follows:
 ```bash
 # Create virtual environment
 python -m venv .venv
@@ -331,7 +302,7 @@ source .venv/bin/activate  # Linux/macOS
 # Install dependencies
 pip install -r requirements.txt
 
-# Set environment variables
+# Set environment variables (If using multi-host, specify the stack manager details here)
 export PORTAINER_URL="https://your-portainer:9000"
 export PORTAINER_API_KEY="ptr_your_key"
 
@@ -376,16 +347,13 @@ To use images from **GitHub Container Registry** (GHCR):
 2. **Private GHCR images** require a GitHub Personal Access Token:
    - Create a PAT in GitHub → Settings → Developer Settings → Personal Access Tokens
    - Select `read:packages` scope
-   - In Portainer, create a registry credential:
-     - Registry: `ghcr.io`
-     - Username: `<github-username>`
-     - Password: `<your-pat>`
-   - Deckhand will automatically use Portainer's stored credentials
+   - Ensure your provider (Portainer, Docker, etc.) has credentials configured for `ghcr.io`.
+   - Deckhand will automatically leverage the provider's stored authentication.
 
 ### Example: Adding a GHCR-Hosted Container
 
 ```bash
-# In Portainer, add container from image:
+# Deploy your container via your chosen provider:
 ghcr.io/your-org/your-app:v1.2.3
 
 # Deckhand will:
@@ -420,15 +388,79 @@ ghcr.io/your-org/your-app:v1.2.3
 - ✅ Version history tracking
 - ✅ Unused image/volume/network cleanup
 
-### **Phase 3 — UX**
-- Scheduling Engine (defined by stack) 
-  - Update Scheduler Modal with rich UI elements enabling stack-level scheduling (in the style of "Azure Update Rings")
-  - Enable Ignore Version Rules (Defined in Scheduler Modal by existing Container Image)
-- Advance Event Modal
-  - Add 'last container version' history record, to display in Events
-  - Add identified 'Portainer Notifications' records, to display in Events
+### **✅ Phase 3 — UX (COMPLETE)**
+- ✅ Scheduling Engine (defined by stack) 
+  - ✅ Update Scheduler Modal with rich UI elements enabling stack-level scheduling (in the style of "Azure Update Rings")
+  - ✅ Enable Ignore Version Rules (Defined in Scheduler Modal by existing Container Image)
+- ✅ Advance Event Modal
+  - ✅ Add 'last container version' history record, to display in Events
+  - ✅ Add identified 'Portainer Notifications' records, to display in Events
 
-### **Phase 4 — Maintenance & Utilities**
+---
+
+---
+### **✅ Phase 4 — Multi‑Backend Orchestration (COMPLETE)**  
+Deckhand is now a universal container management engine. This phase introduced a **Provider Abstraction Layer** that enables Deckhand to operate across multiple backend providers simultaneously.
+
+- ✅ **🐳 Direct Docker "Native" Engine:** Support for the Direct Docker API (Socket/TLS) out of the box.
+- ✅ **Standardized Update Logic:** Native `pull -> stop -> rm -> run` orchestration within the Docker provider.
+- ✅ **Orchestrator Adapters:** Seamless integration with Portainer while maintaining a "Source of Truth" for your fleet.
+
+#### **🔌 Orchestrator Adapters**
+To ensure Deckhand doesn't break the "Source of Truth" for users who prefer specific UIs, we will implement **Adapters**. These tell the orchestrator to perform the update so the UI stays in sync:
+- ✅ **Portainer Adapter** (Refactor of current logic)
+- ✅ **Dockge Adapter** (Stack-based updates)
+* ✅ **Dockhand Adapter** (Support for Dockhand Orchestrator)
+* ✅ **Arcane Adapter** (Secure orchestrator support)
+
+#### **🌐 Unified Fleet Management**
+- **Backend-Agnostic discovery:** Manage a heterogeneous fleet where some hosts are raw Docker, some are Portainer endpoints, others use Dockge, Arcane, or Dockhand.
+- **Multi-Host Aggregation:** A single Deckhand instance acting as a "Command Center" for your entire homelab. Supports multiple orchestration instances via numbered environment variables (e.g., `PORTAINER_1_URL`, `DOCKGE_1_URL`, `ARCANE_1_URL`, `DOCKHAND_1_URL`).
+- **Agentless philosophy:** All communication remains remote and agentless, requiring only network/API access to the target hosts.
+
+---
+
+### **Phase 5 — Homelab Intelligence & Stack Mapping (Planned)**  
+As homelabs scale, they naturally evolve into complex ecosystems: dozens of containers, multiple stacks, reverse proxies, VPN tunnels, shared volumes, and service chains that become difficult to visualize over time. Phase 5 introduces **Homelab Intelligence** — a new layer of insight designed to make Deckhand feel like “Immich‑level polish for homelab container management.”
+
+#### **🗺️ Automatic Architecture Diagrams**  
+Generate real‑time, interactive diagrams for any container or stack using provider metadata, networks, volumes, and reverse‑proxy rules.
+
+A new **“View Network Map”** button will appear on each container card, opening a modal that displays:
+
+- Container‑level topology  
+- Connected services  
+- Network boundaries  
+- Volume mounts  
+- Reverse‑proxy chains  
+- Upstream/downstream dependencies  
+
+This modal will also be accessible from inside the **Update Scheduler** modal via a compact **View Network Map* icon.
+
+#### **🔗 Dependency Mapping**  
+Automatically map relationships between containers, including:
+
+- Reverse proxy → service routing  
+- Database → application links  
+- VPN → client tunnels  
+- Multi‑container stack relationships  
+- Cross‑host dependencies (via managed endpoints)
+
+This provides a clear picture of how updates may impact the rest of the stack.
+
+#### **🤖 AI‑Powered Upgrade Planning**  
+Create new **intelligence** service, with ability to use external local LLM as default, or optional Gemini and Copilot integrations, to analyze stack dependencies and generate an **optimal update sequence** that avoids downtime or broken chains.
+
+The scheduler will:
+
+- Reorder updates based on dependency graph  
+- Warn about breaking changes  
+- Suggest safe update windows  
+- Automatically apply the correct sequence when schedules run  
+
+---
+
+### **Phase 6 — Maintenance & Utilities**
 - Create new modal to Backup and Restore container volumes
 
   **Backup Command:**
@@ -450,70 +482,7 @@ ghcr.io/your-org/your-app:v1.2.3
 
 ---
 
-## **Phase 5 — Homelab Intelligence & Stack Mapping (Planned)**  
-As homelabs scale, they naturally evolve into complex ecosystems: dozens of containers, multiple stacks, reverse proxies, VPN tunnels, shared volumes, and service chains that become difficult to visualize over time. Phase 5 introduces **Homelab Intelligence** — a new layer of insight designed to make Deckhand feel like “Immich‑level polish for homelab container management.”
-
-### **🗺️ Automatic Architecture Diagrams**  
-Generate real‑time, interactive diagrams for any container or stack using Portainer metadata, networks, volumes, and reverse‑proxy rules.
-
-A new **“View Architecture”** button will appear on each container row, opening a modal that displays:
-
-- Container‑level topology  
-- Connected services  
-- Network boundaries  
-- Volume mounts  
-- Reverse‑proxy chains  
-- Upstream/downstream dependencies  
-
-This modal will also be accessible from inside the **Update Scheduler** modal via a compact **“View Diagram”** icon button.
-
-### **🔗 Dependency Mapping**  
-Automatically map relationships between containers, including:
-
-- Reverse proxy → service routing  
-- Database → application links  
-- VPN → client tunnels  
-- Multi‑container stack relationships  
-- Cross‑host dependencies (via Portainer endpoints)
-
-This provides a clear picture of how updates may impact the rest of the stack.
-
-### **🤖 AI‑Powered Upgrade Planning**  
-Create new **intelligence** service, with ability to use external local LLM as default, or optional Gemini and Copilot integrations, to analyze stack dependencies and generate an **optimal update sequence** that avoids downtime or broken chains.
-
-The scheduler will:
-
-- Reorder updates based on dependency graph  
-- Warn about breaking changes  
-- Suggest safe update windows  
-- Automatically apply the correct sequence when schedules run  
-
----
-
-## **Phase 6 — Multi‑Backend Orchestration (Planned)**  
-Deckhand currently relies on the Portainer API as its orchestration layer. Phase 7 introduces a new abstraction layer that removes the hard dependency on Portainer and enables Deckhand to operate across multiple backend providers (while remaining fully **agentless**).
-
-Deckhand will evolve from a Portainer-specific tool into a universal container management engine. This phase introduces a **Provider Abstraction Layer** that prioritizes direct Docker communication while maintaining compatibility with popular orchestrators.
-
-#### **🐳 Direct Docker "Native" Engine**
-The core of Deckhand will move to the **Direct Docker API (Remote TLS/Socket)**. This makes Deckhand a standalone powerhouse for:
-- **Native Updates:** Pulling, recreating, and cleanup without a middleman.
-- **Volume Backups:** Direct access to volume management for Phase 4 features.
-- **Security Audits:** Direct inspection of container configurations and network exposures.
-
-#### **🔌 Orchestrator Adapters**
-To ensure Deckhand doesn't break the "Source of Truth" for users who prefer specific UIs, we will implement **Adapters**. These tell the orchestrator to perform the update so the UI stays in sync:
-- **Portainer Adapter** (Refactor of current logic)
-- **Dockge / Yacht / Dockhand Adapters** (Planned)
-
-#### **🌐 Unified Fleet Management**
-- **Backend-Agnostic discovery:** Manage a heterogeneous fleet where some hosts are raw Docker, some are Portainer endpoints, and others use Dockge.
-- **Multi-Host Aggregation:** A single Deckhand instance acting as a "Command Center" for your entire homelab, regardless of which management tools are installed on individual nodes.
-- **Agentless philosophy:** All communication remains remote and agentless, requiring only network/API access to the target hosts.
-
----
-
-## **Phase 7 — Continue to Expand Functionality**
+### **Phase 7 — Continue to Expand Functionality**
 - CVE scanning (Trivy integration, any others to consider?)  
 - Notifications (ntfy.shintegration, any others to consider?)
 - Enable MQTT publishing (TBD, tell me what to integrate!)  
@@ -549,4 +518,4 @@ Deckhand is inspired by the strengths of:
 - Watchtower  
 - Homarr  
 
-…but built to solve the gaps between them with a clean, modern, agentless approach to Portainer Update Management, from a dashboard (and specifically my Homarr dashboard).
+…but built to solve the gaps between them with a clean, modern, agentless approach to Container Update Management.

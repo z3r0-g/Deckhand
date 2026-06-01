@@ -4,29 +4,36 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Deckhand</title>
+
     <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='deckhand.css') }}?v={{ cache_bust }}">
 </head>
 <body>
-<!-- TOOLBAR -->
+
+<!-- TOP TOOLBAR -->
 <div class="toolbar">
     <button id="filter-toggle">Show: All</button>
     <button id="update-all">Update All</button>
     <button id="refresh-status">Refresh</button>
     <button id="scheduler-settings">Scheduler</button>
 </div>
-<!-- MAIN CONTENT -->
+
+<!-- LOADING OVERLAY -->
 <div id="loading-overlay" class="loading hidden">
     <div id="loading-text">Loading…</div>
 </div>
+
+<!-- MAIN CONTAINER -->
 <div class="container" id="deckhand"></div>
+
 <!-- BOTTOM TOOLBAR -->
 <div class="bottom-toolbar">
     <button id="search-btn">Search</button>
     <input type="text" id="search-input" class="hidden" placeholder="Search containers...">
     <div id="summary-stats"></div>
 </div>
-<!-- MODAL - SCHEDULER -->
+
+<!-- SCHEDULER MODAL -->
 <div id="scheduler-modal" class="modal hidden">
     <div class="modal-content">
         <div class="modal-header">
@@ -38,37 +45,46 @@
                 <input type="checkbox" id="sched-enabled">
                 Enable Scheduler
             </label>
+
             <label class="sched-row">
                 Interval (minutes):
                 <input type="number" id="sched-interval" min="1">
             </label>
+
             <button id="sched-save" class="primary">Save</button>
         </div>
     </div>
 </div>
-<!-- MODAL - SEARCH -->
-<div id="history-modal" class="modal hidden">
+
+<!-- EVENTS & HISTORY MODAL -->
+<div id="event-modal" class="modal hidden">
     <div class="modal-content">
         <div class="modal-header">
-            <span id="history-title"></span>
-            <button id="close-history">X</button>
+            <span id="event-title"></span>
+            <button id="close-event">X</button>
         </div>
-        <pre id="history-body"></pre>
+        <div id="event-body"></div>
     </div>
 </div>
-<!-- MODAL - LOGS -->
-<div id="log-modal" class="modal hidden">
+
+<!-- FULL-SCREEN MAP MODAL -->
+<div id="map-modal" class="modal hidden">
     <div class="modal-content">
         <div class="modal-header">
-            <span id="log-title"></span>
-            <button id="close-log">X</button>
+            <span id="map-title"></span>
+            <button id="map-close">✕</button>
         </div>
-        <pre id="log-body"></pre>
+        <div id="map-body">
+            <!-- Future network graph will render here -->
+        </div>
     </div>
 </div>
+
 <script>
     window.deckhandUiMode = "{{ ui_mode }}";
 </script>
+
 <script src="{{ url_for('static', filename='deckhand.js') }}?v={{ cache_bust }}"></script>
+
 </body>
 </html>

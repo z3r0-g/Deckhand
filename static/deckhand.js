@@ -7,6 +7,7 @@ let showOnlyUpdates = true;
 let searchTerm = "";
 let lastLogs = {};
 let currentContainerData = [];
+let lastDataHash = "";
 
 let loadingMessages = [];
 let emptyMessages = [];
@@ -110,6 +111,14 @@ function hideLoading() {
 function renderStatus(data) {
     hideLoading();
 
+    // Optimization: Only re-render if the data has actually changed
+    // This prevents layout thrashing during every poll/SSE message
+    const currentHash = JSON.stringify(data) + searchTerm + showOnlyUpdates;
+    if (currentHash === lastDataHash) {
+        return;
+    }
+    lastDataHash = currentHash;
+
     const root = document.getElementById("deckhand");
     root.innerHTML = "";
 
@@ -138,7 +147,7 @@ function renderStatus(data) {
     // NORMAL RENDER
     filtered.forEach(c => {
         const card = document.createElement("div");
-        card.className = "card";
+        card.className = `card ${c.policy === 'ignore' ? 'policy-ignore' : ''}`;
         card.setAttribute("data-id", c.container_id);
 
         const mode = UI_MODE === "pro" ? "pro" : "fun";
@@ -146,7 +155,7 @@ function renderStatus(data) {
 
         card.innerHTML = `
             <div class="name">${c.name}</div>
-            <div class="image">${c.image}</div>
+            <div class="image" title="Image ID: ${c.image_id}">${c.image}</div>
 
             <div class="tag">Host: ${c.endpoint_name || "n/a"}</div>
             <div class="tag">Latest: ${c.latest_tag || "n/a"}</div>
@@ -158,11 +167,11 @@ function renderStatus(data) {
 
             ${
                 c.update_available
-                    ? `<button onclick="updateContainer('${c.container_id}')">Update</button>`
+                    ? `<button class="btn" onclick="updateContainer('${c.container_id}')"><span class="btn-icon update"></span><span class="btn-text">Update</span></button>`
                     : ``
             }
 
-            <button onclick="viewEvents('${c.container_id}')">Events</button>
+            <button class="btn" onclick="viewEvents('${c.container_id}')"><span class="btn-icon events"></span><span class="btn-text">Events</span></button>
         `;
 
         root.appendChild(card);
@@ -174,9 +183,9 @@ function updateSummary(data) {
     if (!bar) return;
 
     const total = data.length;
-    const outdated = data.filter(c => c.update_available).length;
+    const outdated = data.filter(c => c.update_available && c.policy !== 'ignore').length;
     const healthy = total - outdated;
-    const critical = data.filter(c => c.heat === 4).length;
+    const critical = data.filter(c => c.heat === 4 && c.policy !== 'ignore').length;
 
     bar.innerHTML = `
         <div class="stat-item">Total: <span>${total}</span></div>
@@ -319,13 +328,33 @@ if (searchBtn && searchInput && summaryStats) {
 // MODAL - LOGS
 // ---------------------------------------------------------
 async function viewEvents(id) {
-    const modal = document.getElementById("log-modal");
-    const body = document.getElementById("log-body");
-    if (!modal || !body) return;
+    const modal = document.getElementById("event-modal");
+    const body = document.getElementById("event-body");
+    
+    if (!modal) {
+        console.error("Deckhand: Modal element not found in DOM.");
+        return;
+    }
 
-    document.getElementById("log-title").textContent = `Events & History: ${id}`;
-    body.innerHTML = '<div class="loading">Loading timeline...</div>';
+    const container = currentContainerData.find(c => c.container_id === id);
+    const title = document.getElementById("event-title");
+    if (title && container) {
+        title.innerHTML = `
+            <div class="modal-title-summary">
+                <div class="modal-title-main">${container.name}</div>
+                <div class="modal-title-sub">
+                    <span>Current: <b>${container.current_tag}</b></span>
+                    <span class="separator">|</span>
+                    <span>Endpoint: ${container.endpoint_name}</span>
+                </div>
+            </div>
+        `;
+    } else if (title) {
+        title.textContent = `Events & History: ${id}`;
+    }
+    
     modal.classList.remove("hidden");
+    if (body) body.innerHTML = '<div class="loading">Loading timeline...</div>';
 
     try {
         // Fetch Intelligence Events (Phase 2) and Manual Update History (Phase 1)
@@ -334,14 +363,18 @@ async function viewEvents(id) {
             fetch(`/api/containers/${id}/history`)
         ]);
 
-        const events = await evRes.json() || [];
-        const history = await histRes.json() || [];
+        const rawEvents = await evRes.json();
+        const rawHistory = await histRes.json();
+        
+        const events = Array.isArray(rawEvents) ? rawEvents : [];
+        const history = Array.isArray(rawHistory) ? rawHistory : [];
 
         // Standardize data for a unified timeline
         let combined = [];
 
         events.forEach(event => {
             combined.push({
+                // Database now returns ISO 8601 UTC strings ending in 'Z'
                 time: new Date(event.timestamp),
                 type: event.event_type,
                 payload: event.payload,
@@ -353,7 +386,12 @@ async function viewEvents(id) {
             combined.push({
                 time: new Date(entry.timestamp * 1000),
                 type: "manual_update",
-                payload: { from: entry.old_tag, to: entry.new_tag, digest: entry.new_digest },
+                payload: { 
+                    from: entry.old_tag, 
+                    to: entry.new_tag, 
+                    old_digest: entry.old_digest,
+                    new_digest: entry.new_digest 
+                },
                 icon: "🛠️"
             });
         });
@@ -374,7 +412,7 @@ async function viewEvents(id) {
         filterBar.innerHTML = `
             <button class="filter-btn active" data-filter="all">All</button>
             <button class="filter-btn" data-filter="manual">Manual Updates</button>
-            <button class="filter-btn" data-filter="auto">Automated Alerts</button>
+            <button class="filter-btn" data-filter="auto">Intelligence & System</button>
         `;
         body.appendChild(filterBar);
 
@@ -398,23 +436,19 @@ async function viewEvents(id) {
                     const div = document.createElement("div");
                     div.className = "timeline-item";
                     
-                    let detailsHtml = "";
-                    if (item.payload && typeof item.payload === 'object') {
-                        detailsHtml = Object.entries(item.payload).map(([k, v]) => 
+                    let contentHtml = "";
+                    if (item.type === "manual_update" || item.type === "version_bump_detected" || item.type === "digest_mismatch_detected" || item.type === "update_executed") {
+                        const from = item.payload.from || item.payload.old || "unknown";
+                        const to = item.payload.to || item.payload.new || "unknown";
+                        const isDigest = item.type === "digest_mismatch_detected";
+                        contentHtml = `<div class="version-change"><span class="v-old" title="${from}">${isDigest ? from.substring(0, 15) + '...' : from}</span><span class="v-arrow">→</span><span class="v-new" title="${to}">${isDigest ? to.substring(0, 15) + '...' : to}</span></div>`;
+                    } else if (item.payload && typeof item.payload === 'object' && Object.keys(item.payload).length > 0) {
+                        const detailsHtml = Object.entries(item.payload).map(([k, v]) => 
                             `<span class="detail-chip"><b>${k}:</b> ${v}</span>`
                         ).join("");
+                        contentHtml = `<div class="event-details">${detailsHtml}</div>`;
                     }
-
-                    div.innerHTML = `
-                        <div class="timeline-marker">${item.icon}</div>
-                        <div class="timeline-content">
-                            <div class="timeline-header">
-                                <span class="event-type">${item.type.replace(/_/g, ' ')}</span>
-                                <span class="event-time">${item.time.toLocaleTimeString()} - ${item.time.toLocaleDateString()}</span>
-                            </div>
-                            <div class="event-details">${detailsHtml}</div>
-                        </div>
-                    `;
+                    div.innerHTML = `<div class="timeline-marker">${item.icon}</div><div class="timeline-content"><div class="timeline-header"><span class="event-type">${item.type.replace(/_/g, ' ')}</span><span class="event-time">${item.time.toLocaleString()}</span></div>${contentHtml}</div>`;
                     timelineRoot.appendChild(div);
                 });
             }
@@ -448,21 +482,22 @@ async function viewEvents(id) {
     }
 }
 
-const closeLogBtn = document.getElementById("close-log");
-if (closeLogBtn) {
-    closeLogBtn.addEventListener("click", () => {
-        const modal = document.getElementById("log-modal");
-        if (modal) modal.classList.add("hidden");
-    });
-}
+// Use event delegation for all modal interactions.
+// This is more performant and resilient than individual listeners.
+document.addEventListener("click", (e) => {
+    const target = e.target;
 
-const closeHistoryBtn = document.getElementById("close-history");
-if (closeHistoryBtn) {
-    closeHistoryBtn.addEventListener("click", () => {
-        const modal = document.getElementById("history-modal");
-        if (modal) modal.classList.add("hidden");
-    });
-}
+    // Close Log/History Modals
+    if (target.closest("#close-event") || target.closest("#sched-close")) {
+        const modals = document.querySelectorAll(".modal");
+        modals.forEach(m => m.classList.add("hidden"));
+    }
+
+    // Close modal if clicking outside the modal-content (on the overlay)
+    if (target.classList.contains("modal")) {
+        target.classList.add("hidden");
+    }
+});
 
 
 // ---------------------------------------------------------
@@ -521,13 +556,88 @@ if (refreshBtn) {
 const schedulerSettingsBtn = document.getElementById("scheduler-settings");
 if (schedulerSettingsBtn) {
     schedulerSettingsBtn.addEventListener("click", async () => {
-        const res = await fetch("/api/scheduler/config");
-        const cfg = await res.json();
+        const [configRes, targetsRes] = await Promise.all([
+            fetch("/api/scheduler/config"),
+            fetch("/api/scheduler/targets")
+        ]);
+        
+        const cfg = await configRes.json();
+        const targets = await targetsRes.json();
 
-        document.getElementById("sched-enabled").checked = cfg.enabled;
-        document.getElementById("sched-interval").value = cfg.interval_minutes;
+        const modal = document.getElementById("scheduler-modal");
+        const content = modal.querySelector(".modal-content");
+        
+        // Rebuild modal for Phase 3
+        content.innerHTML = `
+            <div class="modal-header">
+                <div class="modal-title-summary">
+                    <div class="modal-title-main">Scheduling Engine</div>
+                    <div class="modal-title-sub">Configure update rings and stack policies</div>
+                </div>
+                <button id="sched-close" class="btn">✕</button>
+            </div>
+            <div class="sched-section">
+                <div class="sched-label">Global Configuration</div>
+                <label class="sched-row">
+                    <span>Master Enable</span>
+                    <input type="checkbox" id="sched-enabled" ${cfg.enabled ? 'checked' : ''}>
+                </label>
+                <label class="sched-row">
+                    <span>Global Interval (min)</span>
+                    <input type="number" id="sched-interval" value="${cfg.interval_minutes}" style="width:60px;">
+                </label>
+            </div>
+            <div class="sched-section">
+                <div class="sched-label">Target Policies</div>
+                <div id="target-list" style="max-height:300px; overflow-y:auto;">
+                    ${Object.entries(targets.stacks).map(([stackName, containers]) => `
+                        <div class="stack-group">
+                            <div class="stack-header">${stackName}</div>
+                            ${containers.map(c => `
+                                <div class="sched-row">
+                                    <span style="max-width:60%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                                        ${c.name} <small style="opacity:0.5; font-size:0.7rem;">(${c.host})</small>
+                                    </span>
+                                    <select class="policy-select" data-id="${c.id}" style="background:#222; color:#eee; border:1px solid #444; border-radius:4px;">
+                                        <option value="manual" ${c.policy === 'manual' ? 'selected' : ''}>Manual Only</option>
+                                        <option value="auto" ${c.policy === 'auto' ? 'selected' : ''}>🚀 Auto-Update</option>
+                                        <option value="ignore" ${c.policy === 'ignore' ? 'selected' : ''}>🚫 Ignore</option>
+                                    </select>
+                                </div>
+                            `).join('')}
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+            <button id="sched-save-v3" class="btn primary" style="width:100%; margin-top:20px; background:var(--sev-ok);">Save All Changes</button>
+        `;
 
-        document.getElementById("scheduler-modal").classList.remove("hidden");
+        modal.classList.remove("hidden");
+        
+        // Bind new save logic
+        document.getElementById("sched-save-v3").onclick = async () => {
+            // Save Global Config
+            const enabled = document.getElementById("sched-enabled").checked;
+            const interval = parseInt(document.getElementById("sched-interval").value);
+            await fetch("/api/scheduler/config", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ enabled, interval_minutes: interval })
+            });
+
+            // Save Individual Rules
+            const selects = document.querySelectorAll(".policy-select");
+            for (let s of selects) {
+                await fetch("/api/scheduler/rules", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ target_id: s.dataset.id, policy: s.value })
+                });
+            }
+            
+            modal.classList.add("hidden");
+            loadStatus();
+        };
     });
 }
 
@@ -551,24 +661,23 @@ if (schedSaveBtn) {
     });
 }
 
-const schedCloseBtn = document.getElementById("sched-close");
-if (schedCloseBtn) {
-    schedCloseBtn.addEventListener("click", () => {
-        document.getElementById("scheduler-modal").classList.add("hidden");
-    });
-}
-
 // ---------------------------------------------------------
 // MAINTENANCE - PRUNE
 // ---------------------------------------------------------
 async function confirmPrune() {
-    const modal = document.getElementById("log-modal");
-    const body = document.getElementById("log-body");
-    if (!modal || !body) return;
-
-    document.getElementById("log-title").textContent = "Maintenance: Prune Unused Images";
-    body.innerHTML = '<div class="loading">Scanning for dangling images...</div>';
+    const modal = document.getElementById("event-modal");
+    const body = document.getElementById("event-body");
+    
+    if (!modal) {
+        console.error("Deckhand: Modal element not found in DOM.");
+        return;
+    }
+    
+    const title = document.getElementById("event-title");
+    if (title) title.textContent = "Maintenance: Prune Unused Images";
+    
     modal.classList.remove("hidden");
+    if (body) body.innerHTML = '<div class="loading">Scanning for dangling images...</div>';
 
     try {
         const res = await fetch("/api/maintenance/prune/dry-run");

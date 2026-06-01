@@ -1,6 +1,9 @@
 from flask import Flask, send_from_directory, render_template
 import os
 from dotenv import load_dotenv
+# Load environment variables early so they are available to all modules
+load_dotenv()
+
 from urllib.parse import urlparse
 import time
 
@@ -10,12 +13,10 @@ from api.routes import api_blueprint
 # DB + Scheduler
 from services.database import init_db
 from scheduler.scheduler import init_scheduler
+from services.integrations import manager
 
 # Deckhand Flask Application Factory
 def create_app():
-    # Load environment variables from .env file for local development
-    load_dotenv()
-
     # Use standard Flask directories: templates/ and static/
     app = Flask(__name__, template_folder="templates", static_folder="static")
 
@@ -31,21 +32,10 @@ def create_app():
         app.config["PORTAINER_API_KEY"] = os.getenv("PORTAINER_API_KEY", "")
         app.config["UI_MODE"] = os.getenv("DECKHAND_UI_MODE", "fun")
 
-    # Normalize and Validate Portainer URL
-    p_url = app.config.get("PORTAINER_URL", "").strip()
-    
-    # Auto-prepend http:// if a scheme is missing (standard for homelabs)
-    if p_url and "://" not in p_url:
-        p_url = f"http://{p_url}"
-
-    p_url = p_url.rstrip("/")
-    parsed = urlparse(p_url)
-
-    if p_url and not parsed.netloc:
-        app.logger.warning(f"PORTAINER_URL '{p_url}' seems to be missing a hostname. Connectivity may fail.")
-        app.config["PORTAINER_URL"] = ""
-    else:
-        app.config["PORTAINER_URL"] = p_url
+    # Validate Integrations
+    if not manager.is_configured():
+        app.logger.error("No container orchestration providers (Portainer, Dockge, or Docker Socket) detected. "
+                         "Please check your environment variables.")
 
     # Initialize SQLite database
     init_db(app)
@@ -68,7 +58,11 @@ def create_app():
     # Health check
     @app.get("/health")
     def health():
-        return {"status": "ok", "service": "deckhand"}
+        return {
+            "status": "ok", 
+            "service": "deckhand", 
+            "version": app.config.get("VERSION", "unknown")
+        }
     
     @app.get("/")
     def deckhand_ui():

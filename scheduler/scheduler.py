@@ -54,28 +54,22 @@ def run_scheduled_updates():
     Runs automatically based on interval_minutes.
     """
     from flask import current_app
-    from integrations.portainer import PortainerClient
+    from services.integrations import manager
     from services.registry_poller import RegistryPoller
-    from db.database import add_update_history
+    from services.database import get_all_schedule_rules
+    from services.database import add_update_history
 
-    app = current_app._get_current_object()
-
-    portainer = PortainerClient(
-        base_url=app.config.get("PORTAINER_URL", ""),
-        api_key=app.config.get("PORTAINER_API_KEY", "")
-    )
     poller = RegistryPoller()
-
     cfg = load_scheduler_config()
+    rules = get_all_schedule_rules()
     skip_list = cfg.get("skip", {})
 
-    endpoints = portainer.list_endpoints()
-    if not isinstance(endpoints, list):
-        return
+    endpoints = manager.get_all_endpoints()
 
     for ep in endpoints:
         ep_id = ep.get("Id")
-        containers = portainer.list_containers(ep_id)
+        provider = manager.get_provider(ep.get("_provider"))
+        containers = provider.list_containers(ep_id)
 
         if not isinstance(containers, list):
             continue
@@ -86,6 +80,11 @@ def run_scheduled_updates():
 
             # Skip logic
             if skip_list.get(cid):
+                continue
+            
+            # Phase 3 Policy Check
+            policy = rules.get(cid, {}).get('policy', 'manual')
+            if policy != 'auto':
                 continue
 
             poll = poller.poll_image(image_ref)
@@ -103,7 +102,7 @@ def run_scheduled_updates():
                 continue
 
             try:
-                _perform_update(portainer, poller, ep_id, c, poll)
+                _perform_update(provider, poller, ep_id, c, poll)
             except Exception:
                 continue
 
@@ -111,11 +110,11 @@ def run_scheduled_updates():
 # ---------------------------------------------------------
 # INTERNAL UPDATE FUNCTION
 # ---------------------------------------------------------
-def _perform_update(portainer, poller, ep_id, container, poll_result):
-    from db.database import add_update_history
+def _perform_update(provider, poller, ep_id, container, poll_result):
+    from services.database import add_update_history
 
     full_id = container.get("Id")
-    inspect = portainer.inspect_container(ep_id, full_id)
+    inspect = provider.inspect_container(ep_id, full_id)
 
     config = inspect.get("Config", {})
     host_config = inspect.get("HostConfig", {})
@@ -128,11 +127,11 @@ def _perform_update(portainer, poller, ep_id, container, poll_result):
     old_digest = poll_result.get("digest_current")
 
     # Pull
-    portainer.pull_image(ep_id, repo, tag)
+    provider.pull_image(ep_id, repo, tag)
 
     # Stop + remove
-    portainer.stop_container(ep_id, full_id)
-    portainer.remove_container(ep_id, full_id)
+    provider.stop_container(ep_id, full_id)
+    provider.remove_container(ep_id, full_id)
 
     # Recreate
     container_name = inspect.get("Name", "").lstrip("/") or "container"
@@ -151,10 +150,10 @@ def _perform_update(portainer, poller, ep_id, container, poll_result):
         "NetworkingConfig": {"EndpointsConfig": networking}
     }
 
-    created = portainer.create_container(ep_id, container_name, create_payload)
+    created = provider.create_container(ep_id, container_name, create_payload)
     new_id = created.get("Id")
 
-    portainer.start_container(ep_id, new_id)
+    provider.start_container(ep_id, new_id)
 
     new_digest = poll_result.get("digest_latest")
 

@@ -1,5 +1,5 @@
 {
-    "enabled": false,
-    "interval_minutes": 60,
+    "enabled": true,
+    "interval_minutes": 1440,
     "skip": {}
 }

@@ -1,37 +1,28 @@
 from flask import Blueprint, current_app, jsonify, request, Response
-from integrations.portainer import PortainerClient
 from services.registry_poller import RegistryPoller
 from services.cache import cache
 from services.intelligence import evaluate_container_intelligence
-from services.database import upsert_container
+from services.database import (
+    upsert_container, 
+    log_event, 
+    get_all_schedule_rules, 
+    add_update_history, 
+    get_update_history, 
+    get_events_for_container,
+    set_schedule_rule
+)
+from services.integrations import manager
 import json
 import time
 
 api_blueprint = Blueprint("api", __name__)
-
-
-# ---------------------------------------------------------
-# Portainer Client Loader
-# ---------------------------------------------------------
-def get_portainer():
-    url = current_app.config.get("PORTAINER_URL", "")
-    key = current_app.config.get("PORTAINER_API_KEY", "")
-    if not url or not key:
-        current_app.logger.error(f"Portainer config missing: URL='{url}', Key='{'***' if key else 'MISSING'}'")
-    return PortainerClient(
-        base_url=url,
-        api_key=key
-    )
-
 
 # ---------------------------------------------------------
 # GET /api/hosts
 # ---------------------------------------------------------
 @api_blueprint.get("/hosts")
 def get_hosts():
-    portainer = get_portainer()
-    endpoints = portainer.list_endpoints()
-    return jsonify(endpoints)
+    return jsonify(manager.get_all_endpoints())
 
 
 # ---------------------------------------------------------
@@ -39,8 +30,7 @@ def get_hosts():
 # ---------------------------------------------------------
 @api_blueprint.get("/containers")
 def get_containers():
-    portainer = get_portainer()
-    endpoints = portainer.list_endpoints()
+    endpoints = manager.get_all_endpoints()
 
     if not isinstance(endpoints, list):
         return jsonify({"error": "Failed to fetch endpoints", "details": endpoints})
@@ -50,8 +40,8 @@ def get_containers():
     for ep in endpoints:
         ep_id = ep.get("Id")
         ep_name = ep.get("Name")
-
-        containers = portainer.list_containers(ep_id)
+        provider = manager.get_provider(ep.get("_provider"))
+        containers = provider.list_containers(ep_id)
 
         all_containers.append({
             "endpoint_id": ep_id,
@@ -67,10 +57,8 @@ def get_containers():
 # ---------------------------------------------------------
 @api_blueprint.get("/containers/scan")
 def scan_containers():
-    portainer = get_portainer()
     poller = RegistryPoller()
-
-    endpoints = portainer.list_endpoints()
+    endpoints = manager.get_all_endpoints()
     results = []
 
     if not isinstance(endpoints, list):
@@ -79,8 +67,9 @@ def scan_containers():
     for ep in endpoints:
         ep_id = ep.get("Id")
         ep_name = ep.get("Name")
+        provider = manager.get_provider(ep.get("_provider"))
 
-        containers = portainer.list_containers(ep_id)
+        containers = provider.list_containers(ep_id)
 
         if isinstance(containers, dict) and "error" in containers:
             results.append({
@@ -125,34 +114,31 @@ def update_container(container_id):
     Pulls the latest image, stops, removes, and recreates the container
     preserving existing configurations.
     """
-    from services.database import add_update_history
-
-    portainer = get_portainer()
     poller = RegistryPoller()
-    endpoint_id = request.args.get("endpoint_id", type=int)
+    endpoint_id = request.args.get("endpoint_id")
+    provider_name = request.args.get("provider")
 
     log = []
     def log_step(msg, data=None):
         entry = msg if data is None else f"{msg}: {data}"
         log.append(entry)
-
-    endpoints = portainer.list_endpoints()
+    
+    endpoints = manager.get_all_endpoints()
     if not isinstance(endpoints, list):
         return jsonify({"error": "Failed to fetch endpoints", "details": endpoints}), 500
 
-    if endpoint_id is not None:
-        endpoints_to_search = [e for e in endpoints if e.get("Id") == endpoint_id]
-        if not endpoints_to_search:
-            return jsonify({"error": "endpoint_not_found", "endpoint_id": endpoint_id}), 404
-    else:
-        endpoints_to_search = endpoints
-
     found = None
     found_ep_id = None
+    found_provider = None
 
-    for ep in endpoints_to_search:
+    for ep in endpoints:
+        # Filter by endpoint_id and provider if provided
+        if endpoint_id is not None and str(ep.get("Id")) != endpoint_id: continue
+        if provider_name and ep.get("_provider") != provider_name: continue
+
         ep_id = ep.get("Id")
-        containers = portainer.list_containers(ep_id)
+        provider = manager.get_provider(ep.get("_provider"))
+        containers = provider.list_containers(ep_id)
 
         if not isinstance(containers, list):
             continue
@@ -161,6 +147,7 @@ def update_container(container_id):
             if c.get("Id") == container_id:
                 found = c
                 found_ep_id = ep_id
+                found_provider = provider
                 break
 
         if found:
@@ -170,6 +157,7 @@ def update_container(container_id):
             if c.get("Id", "").startswith(container_id):
                 found = c
                 found_ep_id = ep_id
+                found_provider = provider
                 break
 
         if found:
@@ -181,7 +169,7 @@ def update_container(container_id):
     full_id = found.get("Id")
     log_step("Resolved container", full_id)
 
-    inspect = portainer.inspect_container(found_ep_id, full_id)
+    inspect = found_provider.inspect_container(found_ep_id, full_id)
     if isinstance(inspect, dict) and "error" in inspect:
         return jsonify({"error": "inspect_failed", "details": inspect}), 500
 
@@ -209,83 +197,30 @@ def update_container(container_id):
     old_tag = poll_result.get("current_tag")
     old_digest = poll_result.get("digest_current")
 
-    log_step("Pulling image", f"{repo}:{tag}")
-    pull_result = portainer.pull_image(found_ep_id, repo, tag)
-    log_step("Pull result", pull_result)
-
-    if isinstance(pull_result, dict) and "error" in pull_result:
-        return jsonify({"error": "image_pull_failed", "details": pull_result, "log": log}), 500
-
-    log_step("Stopping container")
-    stop_result = portainer.stop_container(found_ep_id, full_id)
-    log_step("Stop result", stop_result)
-
-    if isinstance(stop_result, dict) and "error" in stop_result:
-        return jsonify({"error": "stop_failed", "details": stop_result, "log": log}), 500
-
-    log_step("Removing container")
-    rm_result = portainer.remove_container(found_ep_id, full_id)
-    log_step("Remove result", rm_result)
-
-    if isinstance(rm_result, dict) and "error" in rm_result:
-        return jsonify({"error": "remove_failed", "details": rm_result, "log": log}), 500
-
-    container_name = inspect.get("Name") or found.get("Names", ["unknown"])[0]
-    if container_name.startswith("/"):
-        container_name = container_name[1:]
-
-    log_step("Recreating container", container_name)
-
-    create_payload = {
-        "Image": f"{repo}:{tag}",
-        "Env": config.get("Env"),
-        "Cmd": config.get("Cmd"),
-        "Entrypoint": config.get("Entrypoint"),
-        "WorkingDir": config.get("WorkingDir"),
-        "User": config.get("User"),
-        "Labels": config.get("Labels"),
-        "ExposedPorts": config.get("ExposedPorts"),
-        "Volumes": config.get("Volumes"),
-        "HostConfig": host_config,
-        "NetworkingConfig": {"EndpointsConfig": networking}
-    }
-
-    created = portainer.create_container(found_ep_id, container_name, create_payload)
-    log_step("Create result", created)
-
-    if isinstance(created, dict) and "error" in created:
-        return jsonify({"error": "create_failed", "details": created, "log": log}), 500
-
-    new_id = created.get("Id")
-
-    log_step("Starting container", new_id)
-    start_result = portainer.start_container(found_ep_id, new_id)
-    log_step("Start result", start_result)
-
-    if isinstance(start_result, dict) and "error" in start_result:
-        return jsonify({"error": "start_failed", "details": start_result, "log": log}), 500
-
-    log_step("Update complete")
-
-    new_tag = tag
-    new_digest = poll_result.get("digest_latest")
-
-    add_update_history(
+    # Delegate Orchestration to the Provider
+    # This allows Dockge to use stack-up and Docker to use pull/rm/run
+    update_result = found_provider.execute_container_update(
+        endpoint_id=found_ep_id,
         container_id=full_id,
-        old_tag=old_tag,
-        new_tag=new_tag,
-        old_digest=old_digest,
-        new_digest=new_digest
+        image=repo,
+        tag=tag,
+        inspect_data=inspect
     )
+
+    if "error" in update_result:
+        return jsonify(update_result), 500
+
+    # Log Event and History
+    log_event(full_id, "update_executed", {"from": old_tag, "to": tag, "status": "success"})
+    add_update_history(full_id, old_tag, tag, old_digest, poll_result.get("digest_latest"))
 
     return jsonify({
         "status": "updated",
         "endpoint_id": found_ep_id,
-        "old_container_id": full_id,
-        "new_container_id": new_id,
+        "new_container_id": update_result.get("Id"),
         "image_before": image_ref,
         "image_after": f"{repo}:{tag}",
-        "log": log
+        "log": update_result.get("log", [])
     })
 
 
@@ -294,8 +229,6 @@ def update_container(container_id):
 # ---------------------------------------------------------
 @api_blueprint.get("/containers/<container_id>/history")
 def container_history(container_id):
-    from services.database import get_update_history
-
     try:
         history = get_update_history(container_id, limit=50)
         return jsonify(history)
@@ -316,8 +249,6 @@ def container_events(container_id):
     Returns the intelligence audit log for a specific container.
     Phase 2 component.
     """
-    from services.database import get_events_for_container
-
     try:
         events = get_events_for_container(container_id)
         # Parse JSON payloads for the frontend
@@ -345,33 +276,36 @@ def containers_status():
     from scheduler.scheduler import load_scheduler_config
     cfg = load_scheduler_config()
     skip_list = cfg.get("skip", {})
-
-    portainer = get_portainer()
+    rules = get_all_schedule_rules()
     poller = RegistryPoller()
-
     results = []
 
-    endpoints = portainer.list_endpoints()
-    current_app.logger.info(f"Portainer Discovery: Found {len(endpoints) if isinstance(endpoints, list) else 0} endpoints")
-
-    if not isinstance(endpoints, list):
-        current_app.logger.error(f"Failed to fetch Portainer endpoints: {endpoints}")
-        return jsonify({"error": "portainer_connection_failed", "details": endpoints}), 500
+    endpoints = manager.get_all_endpoints()
+    current_app.logger.info(f"Integration Discovery: Found {len(endpoints)} endpoints across configured providers")
 
     for ep in endpoints:
         ep_id = ep.get("Id")
         ep_name = ep.get("Name")
+        provider = manager.get_provider(ep.get("_provider"))
 
-        containers = portainer.list_containers(ep_id)
+        containers = provider.list_containers(ep_id)
         if not isinstance(containers, list):
             current_app.logger.warning(f"Endpoint {ep_name} (ID: {ep_id}) returned non-list containers: {containers}")
             continue
 
-        current_app.logger.info(f"Endpoint {ep_name}: Processing {len(containers)} containers")
-
         for c in containers:
             cid = c.get("Id")
+            raw_image_id = c.get("ImageID") or c.get("Image", "")
             image_ref = c.get("Image", "")
+            labels = c.get("Labels", {})
+
+            # If we see a SHA, try to recover the human-readable image name from labels.
+            # This is common when an image is updated/dangling but the container is still running the old ID.
+            if image_ref.startswith("sha256:") or len(image_ref) == 64:
+                image_ref = labels.get("com.docker.compose.image") or \
+                            labels.get("org.opencontainers.image.ref.name") or \
+                            labels.get("org.opencontainers.image.title") or \
+                            image_ref
 
             # Wrap polling in a try/except so one registry failure doesn't kill the whole list
             try:
@@ -393,10 +327,15 @@ def containers_status():
 
             update_available = is_outdated
 
+            # Stack Detection from labels
+            labels = c.get("Labels", {})
+            stack_name = labels.get("com.docker.compose.project") or labels.get("com.docker.stack.namespace") or "Standalone"
+
             container_data = {
                 "container_id": cid,
                 "name": c.get("Names", ["unknown"])[0].lstrip("/"),
                 "image": image_ref,
+                "image_id": raw_image_id,
                 "current_tag": current_tag,
                 "latest_tag": latest_tag,
                 "digest_current": digest_current,
@@ -405,8 +344,11 @@ def containers_status():
                 "update_available": update_available,
                 "endpoint_id": ep_id,
                 "endpoint_name": ep_name,
+                "provider": ep.get("_provider"),
                 "update_url": f"/api/containers/{cid}/update",
-                "skipped": skip_list.get(cid, False)
+                "skipped": skip_list.get(cid, False),
+                "stack": stack_name,
+                "policy": rules.get(cid, {}).get('policy', 'manual')
             }
             
             # Trigger Intelligence Evaluation
@@ -473,7 +415,11 @@ def scheduler_update_config():
     save_scheduler_config(cfg)
 
     # Rebuild scheduler job
-    scheduler.remove_job("deckhand_update_scheduler", jobstore=None, silent=True)
+    try:
+        # Explicitly remove job to avoid duplicates on interval changes
+        scheduler.remove_job("deckhand_update_scheduler")
+    except Exception:
+        pass
 
     if cfg["enabled"]:
         scheduler.add_job(
@@ -489,20 +435,8 @@ def scheduler_update_config():
 @api_blueprint.get("/maintenance/prune/dry-run")
 def maintenance_prune_dry_run():
     """Returns a list of dangling images across all endpoints for confirmation."""
-    portainer = get_portainer()
-    endpoints = portainer.list_endpoints()
-    results = []
-
-    if not isinstance(endpoints, list):
-        return jsonify({"error": "failed_to_list_endpoints"}), 500
-
-    for ep in endpoints:
-        imgs = portainer.get_images(ep.get("Id"), dangling=True)
-        if isinstance(imgs, list) and len(imgs) > 0:
-            for img in imgs:
-                results.append({"endpoint": ep.get("Name"), "id": img.get("Id"), "tags": img.get("RepoTags")})
-
-    return jsonify(results)
+    from services.maintenance import get_unused_images
+    return jsonify(get_unused_images())
 
 @api_blueprint.post("/maintenance/prune")
 def maintenance_prune():
@@ -510,15 +444,42 @@ def maintenance_prune():
     Triggers a prune of unused Docker images across all endpoints.
     Phase 2 Cleanup Task.
     """
-    portainer = get_portainer()
-    endpoints = portainer.list_endpoints()
-    results = {}
+    from services.maintenance import execute_maintenance_prune
+    return jsonify(execute_maintenance_prune())
 
-    if not isinstance(endpoints, list):
-        return jsonify({"error": "failed_to_list_endpoints"}), 500
+# ---------------------------------------------------------
+# PHASE 3: SCHEDULING ENGINE API
+# ---------------------------------------------------------
+@api_blueprint.get("/scheduler/targets")
+def get_scheduler_targets():
+    """Lists all possible scheduling targets (Stacks and individual Containers)."""
+    status = cache.get("container_status") or []
 
-    for ep in endpoints:
-        ep_id = ep.get("Id")
-        results[ep.get("Name")] = portainer.prune_images(ep_id)
+    stacks = {}
 
-    return jsonify(results)
+    for c in status:
+        s_name = c.get('stack', 'Standalone')
+        if s_name not in stacks:
+            stacks[s_name] = []
+            
+        stacks[s_name].append({
+            "id": c['container_id'],
+            "name": c['name'],
+            "policy": c.get('policy', 'manual'),
+            "host": c.get('endpoint_name')
+        })
+
+    return jsonify({
+        "stacks": stacks
+    })
+
+@api_blueprint.post("/scheduler/rules")
+def update_scheduler_rule():
+    """Updates the policy for a specific target."""
+    data = request.json
+    target_id = data.get("target_id")
+    target_type = data.get("target_type", "container")
+    policy = data.get("policy") # 'auto', 'manual', 'ignore'
+
+    set_schedule_rule(target_id, target_type, policy)
+    return jsonify({"status": "ok"})
