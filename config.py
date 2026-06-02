@@ -14,10 +14,6 @@ load_dotenv()
 # Application Version
 VERSION = os.getenv("APP_VERSION", "0.dev")
 
-# Portainer Configuration (Optional if using Docker Socket)
-PORTAINER_URL = os.getenv("PORTAINER_URL", "").rstrip("/")
-PORTAINER_API_KEY = os.getenv("PORTAINER_API_KEY", "")
-
 #UI Mode (Optional - Set to 'fun' by Default with Optional 'minimal' mode)
 UI_MODE = os.getenv("DECKHAND_UI_MODE", "fun").lower()
 
@@ -26,3 +22,6 @@ DATABASE_PATH = os.getenv("DATABASE_PATH", "deckhand.db")
 
 # Session Secret Key (Optional - Randomly Generated if Not Set)
 SECRET_KEY = os.getenv("SECRET_KEY", secrets.token_hex(32))
+
+# TLS Verification (Optional - Set to 'false' by Default for Security)
+SKIP_TLS_VERIFY = os.getenv("DECKHAND_SKIP_TLS_VERIFY", "false").lower() == "true"

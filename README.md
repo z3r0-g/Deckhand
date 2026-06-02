@@ -1,11 +1,12 @@
 # 🛳️ Deckhand
 <p align="center">
   <a href="https://github.com/z3r0-g/Deckhand" target="_blank">
-    <img src="static/Deckhand.png" alt="Deckhand Logo" width="380">
+    <img src="static/Deckhand.png" alt="Deckhand Logo" width="400">
   </a>
   <br>
-  <b>Agentless Container Update Intelligence for Docker, Portainer, and Dockge</b>
+  <strong>Agentless Container Update Intelligence for Docker, Portainer, and Dockge</strong>
   <br>
+  <a href="https://github.com/z3r0-g/Deckhand/pkgs/container/deckhand"><img src="https://img.shields.io/badge/ghcr-latest-blue?style=flat-square&logo=github" alt="Version"></a>
   <img src="https://img.shields.io/github/license/z3r0-g/Deckhand?style=flat-square" alt="License">
   <img src="https://img.shields.io/github/last-commit/z3r0-g/Deckhand?style=flat-square" alt="Last Commit">
   <img src="https://img.shields.io/github/stars/z3r0-g/Deckhand?style=flat-square" alt="Stars">
@@ -217,7 +218,7 @@ services:
       - "5000:5000"
     volumes:
       - deckhand-db:/app/data
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/run/docker.sock:/var/run/docker.sock
     environment:
       - FLASK_ENV=production
       - DECKHAND_UI_MODE=fun
@@ -252,6 +253,12 @@ All configuration is managed via **environment variables** (see `.env.example` f
 Deckhand is **Zero-Config** by default when running on a local Docker host with the socket mounted.
 
 ### Environment Variables
+
+> [!IMPORTANT]
+> **Security Note:** Deckhand reads API keys from environment variables. In containerized environments, these variables are visible to users with access to the Docker socket or those who can execute `docker inspect`. 
+> - Ensure your `.env` file has restricted permissions (`chmod 600`).
+> - API keys are used only for authentication headers and are **never** logged to the application console or files.
+> - If using a local Docker socket, Deckhand is **Zero-Config** and requires no keys.
 
 | Category | Variable | Description |
 |----------|----------|-------------|

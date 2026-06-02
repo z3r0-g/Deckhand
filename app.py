@@ -1,5 +1,6 @@
 from flask import Flask, send_from_directory, render_template
 import os
+import secrets
 from dotenv import load_dotenv
 # Load environment variables early so they are available to all modules
 load_dotenv()
@@ -38,10 +39,8 @@ def create_app():
         app.config.from_pyfile("config.py")
     else:
         # Safe defaults + Environment Variables
-        app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "dev-key-change-in-production")
+        app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", secrets.token_hex(32))
         app.config["DATABASE_PATH"] = os.getenv("DATABASE_PATH", "deckhand.db")
-        app.config["PORTAINER_URL"] = os.getenv("PORTAINER_URL", "")
-        app.config["PORTAINER_API_KEY"] = os.getenv("PORTAINER_API_KEY", "")
         app.config["UI_MODE"] = os.getenv("DECKHAND_UI_MODE", "fun")
 
     # Validate Integrations
@@ -53,8 +52,7 @@ def create_app():
     validator = ConfigValidator()
     validation_results = validator.validate()
     if not validator.has_valid_providers():
-        logger.error("No valid container orchestration providers detected after validation. Cannot proceed.")
-        raise RuntimeError("No valid container orchestration providers configured")
+        logger.warning("No orchestration providers are currently reachable. Deckhand will start, but functionality will be limited until connections are established.")
 
     # Initialize SQLite database
     init_db(app)

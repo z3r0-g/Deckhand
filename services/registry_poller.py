@@ -1,3 +1,4 @@
+import os
 import requests
 import re
 import logging
@@ -7,9 +8,12 @@ from utils.rate_limiter import rate_limiter
 
 logger = logging.getLogger(__name__)
 
-# Homelab support: Suppress insecure request warnings for self-signed certificates
-import urllib3
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+# Support for skipping TLS verification in homelabs
+SKIP_TLS_VERIFY = os.getenv("DECKHAND_SKIP_TLS_VERIFY", "false").lower() == "true"
+if SKIP_TLS_VERIFY:
+    import urllib3
+    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+    logger.warning("SSL verification is globally disabled via DECKHAND_SKIP_TLS_VERIFY")
 
 from utils.versioning import version_delta
 
@@ -255,7 +259,7 @@ class RegistryPoller:
         url = f"https://registry.hub.docker.com/v2/repositories/{repo}/tags?page_size=100"
 
         while url:
-            r = requests.get(url, timeout=10, verify=False)
+            r = requests.get(url, timeout=10, verify=not SKIP_TLS_VERIFY)
             if r.status_code == 429:
                 rate_limiter.record_429(registry_host)
                 raise Exception(f"Rate limited by Docker Hub (429)")
@@ -287,7 +291,7 @@ class RegistryPoller:
     def _fetch_dockerhub_digest(self, repo, tag):
         try:
             url = f"https://registry.hub.docker.com/v2/repositories/{repo}/tags/{tag}"
-            r = requests.get(url, timeout=10, verify=False)
+            r = requests.get(url, timeout=10, verify=not SKIP_TLS_VERIFY)
             if r.status_code != 200:
                 return None
             data = r.json()
@@ -305,7 +309,7 @@ class RegistryPoller:
 
         tags_url = f"https://ghcr.io/v2/{repo_path}/tags/list"
         try:
-            r = requests.get(tags_url, timeout=10, verify=False)
+            r = requests.get(tags_url, timeout=10, verify=not SKIP_TLS_VERIFY)
             if r.status_code == 429:
                 rate_limiter.record_429(registry_host)
                 raise Exception(f"Rate limited by GHCR (429)")
@@ -334,7 +338,7 @@ class RegistryPoller:
     def _fetch_ghcr_digest(self, repo_path, tag):
         try:
             url = f"https://ghcr.io/v2/{repo_path}/manifests/{tag}"
-            r = requests.get(url, headers=self.OCI_ACCEPT, timeout=10, verify=False)
+            r = requests.get(url, headers=self.OCI_ACCEPT, timeout=10, verify=not SKIP_TLS_VERIFY)
             return r.headers.get("Docker-Content-Digest")
         except Exception:
             return None
@@ -353,7 +357,7 @@ class RegistryPoller:
         headers = {"Accept": "application/json"}
 
         try:
-            r = requests.get(url, headers=headers, timeout=10, verify=False)
+            r = requests.get(url, headers=headers, timeout=10, verify=not SKIP_TLS_VERIFY)
             if r.status_code == 429:
                 rate_limiter.record_429(registry_host)
                 raise Exception(f"Rate limited by lscr.io (429)")
@@ -384,7 +388,7 @@ class RegistryPoller:
     def _fetch_lscr_digest(self, repo_path, tag):
         try:
             url = f"https://lscr.io/v2/{repo_path}/manifests/{tag}"
-            r = requests.get(url, headers=self.OCI_ACCEPT, timeout=10, verify=False)
+            r = requests.get(url, headers=self.OCI_ACCEPT, timeout=10, verify=not SKIP_TLS_VERIFY)
             return r.headers.get("Docker-Content-Digest")
         except Exception:
             return None
@@ -401,7 +405,7 @@ class RegistryPoller:
         tags_url = f"{base}/tags/list"
 
         try:
-            r = requests.get(tags_url, timeout=10, verify=False)
+            r = requests.get(tags_url, timeout=10, verify=not SKIP_TLS_VERIFY)
             if r.status_code == 429:
                 rate_limiter.record_429(registry_host)
                 raise Exception(f"Rate limited by {registry} (429)")
@@ -413,7 +417,7 @@ class RegistryPoller:
             if not registry.startswith("http"):
                 base = f"http://{registry}/v2/{repo_path}"
                 try:
-                    r = requests.get(f"{base}/tags/list", timeout=10, verify=False)
+                    r = requests.get(f"{base}/tags/list", timeout=10, verify=not SKIP_TLS_VERIFY)
                     if r.status_code == 429:
                         rate_limiter.record_429(registry_host)
                         raise Exception(f"Rate limited by {registry} (429)")
@@ -444,7 +448,7 @@ class RegistryPoller:
     def _fetch_private_digest(self, base, tag):
         try:
             url = f"{base}/manifests/{tag}"
-            r = requests.get(url, headers=self.OCI_ACCEPT, timeout=10, verify=False)
+            r = requests.get(url, headers=self.OCI_ACCEPT, timeout=10, verify=not SKIP_TLS_VERIFY)
             return r.headers.get("Docker-Content-Digest")
         except Exception:
             return None

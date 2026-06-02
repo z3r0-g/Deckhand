@@ -3,6 +3,7 @@ import requests
 from urllib.parse import urlparse
 import logging
 
+from config import SKIP_TLS_VERIFY
 logger = logging.getLogger(__name__)
 
 
@@ -90,7 +91,7 @@ class ConfigValidator:
             else:
                 return False, f"Unknown provider: {provider_name}"
 
-            response = requests.get(test_url, headers=headers, timeout=timeout, verify=False)
+            response = requests.get(test_url, headers=headers, timeout=timeout, verify=not SKIP_TLS_VERIFY)
             if response.status_code in (200, 401, 403):
                 return True, "Connected"
             else:
